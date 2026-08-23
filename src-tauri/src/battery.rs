@@ -23,8 +23,7 @@ impl BatteryInfo {
     /// Sub-score 0–10 via the shared scoring curve (None → None: no data,
     /// never fabricate a score).
     pub fn subscore(&self) -> Option<f64> {
-        self.health_percent
-            .map(crate::scoring::battery_subscore)
+        self.health_percent.map(crate::scoring::battery_subscore)
     }
 }
 
@@ -75,13 +74,8 @@ pub fn parse_battery_report_xml(xml: &str) -> BatteryInfo {
         }
     }
 
-    info.health_percent = match (
-        info.full_charge_capacity_mwh,
-        info.design_capacity_mwh,
-    ) {
-        (Some(fcc), Some(dc)) if dc > 0 => {
-            Some(((fcc as f64 / dc as f64) * 1000.0).round() / 10.0)
-        }
+    info.health_percent = match (info.full_charge_capacity_mwh, info.design_capacity_mwh) {
+        (Some(fcc), Some(dc)) if dc > 0 => Some(((fcc as f64 / dc as f64) * 1000.0).round() / 10.0),
         _ => None,
     };
 
