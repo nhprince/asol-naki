@@ -13,8 +13,8 @@ Update the "Current phase" line above as work progresses.
 - [x] Set up `react-i18next` with `en.json`/`bn.json` tables (+ bundled Noto Sans Bengali fonts)
 - [x] Basic Rust proof-of-concept: one Tauri command (`scan_hardware_basic`) calls `sysinfo`, returns CPU name to the frontend *(sysinfo 0.37: physical-core count deferred to WMI in Phase 1)*
 - [x] Git repo initialized, `.gitignore` for `target/`, `node_modules/`, `dist/`
-- [x] CI/CD live: `ci.yml` green · `e2e.yml` (Windows WebDriver, nightly + manual) · `release.yml` (tag → draft release)
-- [ ] **PENDING PRINCE:** run ground-truth checklist on ProBook (download exe from E2E workflow artifacts)
+- [x] CI/CD live & GREEN: `ci.yml` (fmt/clippy/tests + typecheck/vitest/build) · `e2e.yml` — Windows compile + WebDriver suite all passing · `release.yml` (tag → draft release)
+- [ ] **PENDING PRINCE:** run ground-truth checklist on ProBook (download `windows-debug-build` exe artifact from any green E2E run)
 
 **Exit criteria:** a running window that shows your real CPU name, pulled from Rust.
 
