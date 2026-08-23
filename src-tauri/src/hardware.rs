@@ -8,7 +8,7 @@
 use serde::Serialize;
 use sysinfo::System;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct GpuInfo {
     pub name: String,
     /// VRAM bytes if the driver reports it (WMI AdapterRAM is u32-capped at
@@ -17,7 +17,7 @@ pub struct GpuInfo {
     pub driver_version: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, serde::Deserialize)]
 pub struct FullHardwareInfo {
     // --- CPU ---
     pub cpu_name: String,

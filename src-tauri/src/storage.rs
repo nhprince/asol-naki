@@ -7,7 +7,7 @@
 
 use serde::Serialize;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct StorageInfo {
     pub model_name: Option<String>,
     pub serial: Option<String>,
