@@ -143,10 +143,8 @@ pub fn parse_smartctl_json(json: &str) -> StorageInfo {
                         info.power_on_hours = raw;
                     }
                 }
-                "Temperature_Celsius" => {
-                    if info.temperature_c.is_none() {
-                        info.temperature_c = raw.map(|r| r as f64);
-                    }
+                "Temperature_Celsius" if info.temperature_c.is_none() => {
+                    info.temperature_c = raw.map(|r| r as f64);
                 }
                 _ => {}
             }
@@ -156,7 +154,7 @@ pub fn parse_smartctl_json(json: &str) -> StorageInfo {
     info
 }
 
-fn str_field<'a>(v: &'a serde_json::Value, path: &[&str]) -> Option<String> {
+fn str_field(v: &serde_json::Value, path: &[&str]) -> Option<String> {
     let mut cur = v;
     for seg in path {
         cur = cur.get(seg)?;
@@ -203,6 +201,10 @@ pub fn scan_storage() -> Result<Vec<StorageInfo>, String> {
 }
 
 /// Split concatenated smartctl JSON documents (one per drive).
+///
+/// NOTE: only used by the Windows `scan_storage` command; kept compiled on
+/// all platforms so its unit test runs in the Ubuntu CI job.
+#[cfg_attr(not(windows), allow(dead_code))]
 fn split_json_documents(text: &str) -> Vec<String> {
     let mut docs = Vec::new();
     let mut depth = 0i32;
