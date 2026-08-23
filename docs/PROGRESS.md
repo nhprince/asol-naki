@@ -9,6 +9,8 @@ ROADMAP checkboxes get ticked only when CI is green AND ground-truth verified.
 
 | Date (UTC) | Commit | Change | Verification |
 |---|---|---|---|
+| 2026-08-23 | 5e73697 | **PHASE 2 EXIT GATE PROVEN ON WINDOWS:** E2E drives production `run_integrity_checks` inside the app webview — spoofed CPU (Ultra 5 string, i3 reality) → CRITICAL flags; honest profile → clean. Fixes: wmi crate API (COMLibrary::without_security, Vec first-row). smartctl 7.5 staged in CI ✅ | E2E 32661597131 ✅ **5/5 tests on windows-latest** |
+| 2026-08-23 | aa88a49 → 7ea8905 | smartctl bundling: fetch-smartctl.ps1 (choco, pinned 7.5, GPL license shipped), tauri.conf resources, artifact includes smartctl/ | E2E runs ✅ |
 | 2026-08-23 | 5f3d7ee | **P2 UI wiring:** useScan → run_integrity_checks, Critical cap applied to displayed score (3.0), fraud-flags panel with severity badges EN/BN | CI 32659583205 ✅ · local tsc/vitest/build ✅ |
 | 2026-08-23 | 3c9eb30 | **PHASE 2 START — fraud engine:** integrity.rs (CPU thread/core identity vs OS counts → Critical; fake-NVMe-capacity + absurd-capacity heuristics), models_db.rs (11 BD-market CPUs embedded, case-insensitive lookup), `run_integrity_checks` command (JSON-in → E2E can feed spoofed fixtures). **Exit gate proven in tests:** spoofed CPU fixture raises Critical, score capped at 3.0 | CI 32659287426 ✅ (26 rust tests) |
 | 2026-08-23 | cd9376e | **UI:** full scan (parallel `Promise.allSettled`, per-section errors), score card + verdict colors, storage/battery/WMI sections, BN digits | CI 32655584137 ✅ · local tsc/vitest/build ✅ |

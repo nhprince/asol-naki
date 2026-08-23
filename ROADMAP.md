@@ -1,6 +1,6 @@
 # Roadmap — Asol Naki?
 
-No fixed calendar — this is a flexible-pace side project. Phases are ordered by dependency, not by date. **Current phase: Phase 2** (fraud detection engine live in CI; display/input screens pending).
+No fixed calendar — this is a flexible-pace side project. Phases are ordered by dependency, not by date. **Current phase: Phase 2** (fraud engine + E2E spoof gate ✅; display/input guided screens pending).
 
 Update the "Current phase" line above as work progresses.
 
