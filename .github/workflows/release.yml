@@ -31,6 +31,11 @@ jobs:
 
       - run: npm ci
 
+      # Bundle pinned smartctl into the shipped installers.
+      - name: Fetch smartctl for bundling
+        shell: pwsh
+        run: ./scripts/fetch-smartctl.ps1 -Version 7.5
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

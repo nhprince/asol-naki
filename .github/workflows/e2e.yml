@@ -46,6 +46,12 @@ jobs:
         run: npm ci
         working-directory: e2e
 
+      # Bundle pinned smartctl so storage diagnostics work out-of-the-box in
+      # the artifact Prince ground-truth tests.
+      - name: Fetch smartctl for bundling
+        shell: pwsh
+        run: ./scripts/fetch-smartctl.ps1 -Version 7.5
+
       # Debug build with the embedded-WebDriver feature; much faster than a
       # release build and gives readable failures. --no-bundle skips installer
       # packaging (E2E + ground-truth only need the raw exe). The feature adds
@@ -59,7 +65,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-debug-build
-          path: src-tauri/target/debug/asol-naki.exe
+          path: |
+            src-tauri/target/debug/asol-naki.exe
+            src-tauri/resources/smartctl/**
           if-no-files-found: error
           retention-days: 14
 
