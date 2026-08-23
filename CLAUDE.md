@@ -70,3 +70,10 @@ Before considering a diagnostic module complete: it runs on Prince's actual HP P
 ## Current phase
 
 See `ROADMAP.md` — update the "current phase" marker there as work progresses, don't track progress only in chat history.
+
+## Session discipline (added 2026-08-23)
+
+- After EVERY change, add/update a row in `docs/PROGRESS.md`: date, commit hash,
+  what changed, how it was verified (CI run id / local checks / ground-truth).
+- Never tick a ROADMAP checkbox unless CI is green AND (for diagnostic modules)
+  ground-truth verified on the ProBook.

@@ -1,0 +1,23 @@
+# Progress Log — Asol Naki?
+
+**Rule:** update this file after EVERY change (one row per commit, newest first).
+ROADMAP checkboxes get ticked only when CI is green AND ground-truth verified.
+
+**Current phase:** 1 — MVP diagnostics (in progress)
+
+---
+
+| Date (UTC) | Commit | Change | Verification |
+|---|---|---|---|
+| 2026-08-23 | a06d5ee | ROADMAP Phase 0 boxes marked; CI+E2E declared green | CI 32632023384 ✅ · E2E 32631550731 ✅ (3/3 on Windows) |
+| 2026-08-23 | 03186a3 | e2e: deterministic JS-click i18n toggle test | E2E ✅ first fully-green WebDriver run |
+| 2026-08-23 | c435626 → 5adcdce | e2e fixes: screenshots dir, capability shape (`browserName:"tauri"`), named export, lockfile, scoped service pkg | each verified by its CI run |
+| 2026-08-23 | 2820b99 | e2e: switch to @wdio/tauri-service **embedded mode**; feature-gate `wdio` cargo feature (test driver never ships in releases) | CI ✅ |
+| 2026-08-23 | 9443a11 | ROADMAP progress + debug-exe artifact upload for ground-truth testing | CI ✅ |
+| 2026-08-23 | ee01a58 | fix: drop `cpu_cores` (removed in sysinfo 0.37); WMI takes over in Phase 1 | CI ✅ after red clippy run |
+| 2026-08-23 | da43dea | Scaffold: Tauri v2 + React 19 + Tailwind v4 + i18n EN/BN; POC `scan_hardware_basic`; 3 workflows; icons; docs trio + master plan | CI ✅ after clippy fix |
+
+## Phase status
+
+- **Phase 0 — DONE** (pending Prince's ground-truth checklist on ProBook; exe artifact downloadable from any green E2E run)
+- **Phase 1 — IN PROGRESS**: full hardware pull (WMI GPU/motherboard), storage.rs (smartctl JSON), battery.rs (powercfg XML), scoring.rs (weighted formula), minimal results UI
