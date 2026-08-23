@@ -1,0 +1,76 @@
+# E2E — real compiled app driven over WebDriver on a real Windows runner.
+# Runs on PRs touching app code, nightly on main, or manually.
+# Based on the official Tauri WebDriver CI guide:
+# https://v2.tauri.app/develop/tests/webdriver/ci/
+name: E2E
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 21 * * *" # 21:00 UTC = 03:00 Bangladesh Standard Time
+  pull_request:
+    paths:
+      - "src/**"
+      - "src-tauri/**"
+      - "e2e/**"
+      - "package-lock.json"
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  webdriver-windows:
+    name: WebDriver (windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Keeps the Microsoft Edge WebDriver in sync with the runner's WebView2.
+      - name: Install msedgedriver (Windows)
+        run: |
+          cargo install --git https://github.com/chippers/msedgedriver-tool
+          & "$HOME/.cargo/bin/msedgedriver-tool.exe"
+          $PWD.Path >> $env:GITHUB_PATH
+
+      - name: Install dependencies (root)
+        run: npm ci
+
+      - name: Install dependencies (e2e)
+        run: npm ci
+        working-directory: e2e
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --locked
+
+      # Debug build: much faster than release and gives readable failures.
+      - name: Build app (debug)
+        run: npm run tauri build -- --debug
+
+      - name: Run WebDriver suite
+        run: npm test
+        working-directory: e2e
+
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure-evidence
+          path: |
+            e2e/logs/**
+            e2e/*.log
+            e2e/screenshots/**
+          if-no-files-found: ignore
+          retention-days: 7

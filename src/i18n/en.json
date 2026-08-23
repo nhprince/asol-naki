@@ -1,0 +1,28 @@
+{
+  "app": {
+    "title": "Asol Naki?",
+    "subtitle": "Is it genuine? — Laptop Trust Check"
+  },
+  "home": {
+    "heading": "Check a laptop before you buy",
+    "description": "One scan reads the real hardware, cross-checks every claim for fraud, and gives you a trust score out of 10.",
+    "scanButton": "Start Scan"
+  },
+  "scan": {
+    "running": "Scanning hardware…",
+    "cpu": "Processor",
+    "cores": "Cores",
+    "threads": "Threads",
+    "memory": "Memory",
+    "os": "Operating System",
+    "kernel": "Kernel",
+    "hostname": "Device name"
+  },
+  "error": {
+    "scanFailed": "Scan failed — {{message}}",
+    "retry": "Try again"
+  },
+  "footer": {
+    "phaseNote": "Phase 0 proof-of-concept — full diagnostics coming in Phase 1."
+  }
+}

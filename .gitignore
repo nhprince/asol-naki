@@ -1,0 +1,30 @@
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Node
+node_modules/
+dist/
+
+# Tauri / Rust
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+
+# Captured fixtures stay OUT unless sanitized and intentionally committed;
+# raw captures go here.
+fixtures/raw/

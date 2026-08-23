@@ -1,0 +1,25 @@
+@import "tailwindcss";
+@import "@fontsource/noto-sans-bengali/400.css";
+@import "@fontsource/noto-sans-bengali/600.css";
+
+@theme {
+  --color-brand-50: #eef7f9;
+  --color-brand-100: #d6edf1;
+  --color-brand-300: #7fc4d0;
+  --color-brand-500: #2b8ca3;
+  --color-brand-700: #17596c;
+  --color-brand-900: #0d1b3e;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  /* Bengali glyphs come from Noto Sans Bengali; Latin falls back to Inter/system */
+  font-family: "Noto Sans Bengali", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+}

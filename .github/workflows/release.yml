@@ -1,0 +1,43 @@
+# Release builds — triggered by pushing a tag like v0.1.0.
+# Builds signed-nothing Windows bundles and opens a DRAFT GitHub release;
+# review it, write the changelog, publish when happy.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  bundle-windows:
+    name: Windows bundles
+    permissions:
+      contents: write
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Asol Naki? ${{ github.ref_name }}"
+          releaseBody: "Portable Windows build. See ROADMAP.md for phase status."
+          releaseDraft: true
+          prerelease: false
+          args: "--target x86_64-pc-windows-msvc"
