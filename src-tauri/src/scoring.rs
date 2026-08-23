@@ -143,13 +143,16 @@ mod tests {
     }
 
     #[test]
-    fn weights_sum_to_one() {
+    fn weights_match_plan_spec_and_are_normalizable() {
+        // plan.md §7 documents 25/25/20/15/10 — summing to 0.95 because fraud
+        // consistency is a gate, not a weighted category. Lock the spec here;
+        // compute_score normalizes by the total.
         let sum = WEIGHTS.storage
             + WEIGHTS.cpu_gpu_sanity
             + WEIGHTS.battery
             + WEIGHTS.display
             + WEIGHTS.ports_connectivity;
-        assert!((sum - 1.0).abs() < 1e-9);
+        assert!((sum - 0.95).abs() < 1e-9, "weights changed vs plan.md §7");
     }
 
     #[test]
