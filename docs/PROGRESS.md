@@ -9,6 +9,7 @@ ROADMAP checkboxes get ticked only when CI is green AND ground-truth verified.
 
 | Date (UTC) | Commit | Change | Verification |
 |---|---|---|---|
+| 2026-08-23 | cd9376e | **UI:** full scan (parallel `Promise.allSettled`, per-section errors), score card + verdict colors, storage/battery/WMI sections, BN digits | CI 32655584137 ✅ · local tsc/vitest/build ✅ |
 | 2026-08-23 | cecaf16 | **hardware.rs full pull:** WMI GPU/motherboard/BIOS/physical-cores (Windows-gated, degrades to None honestly), `scan_hardware_full` command. Fixes: rustfmt, unused_mut allow | CI 32655208207 ✅ |
 | 2026-08-23 | 5b3d50e | **storage.rs:** smartctl JSON parser (NVMe+ATA), wear scoring (realloc/pending/media/percentage_used), `scan_storage` command, 5 tests. Fixes: percentage_used field name, clippy lints, f64 annotation | CI 32654628579 ✅ (19 rust tests) |
 | 2026-08-23 | c58d01a | scoring.rs: weighted 0-10 engine, critical-fraud cap @3.0, battery/storage sub-score curves (9 tests). Fix: normalize by weight sum — plan §7 weights total 0.95 (fraud = gate), test now locks spec | CI 32653725221 ✅ (14 rust tests) |
