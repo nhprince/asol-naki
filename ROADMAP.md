@@ -8,11 +8,13 @@ Update the "Current phase" line above as work progresses.
 
 ## Phase 0 — Setup
 
-- [ ] Scaffold Tauri v2 + React + TypeScript + Vite + Tailwind project
-- [ ] Confirm `npm run tauri dev` runs a blank window on Prince's machine
-- [ ] Set up `react-i18next` with empty `en.json`/`bn.json` tables
-- [ ] Basic Rust proof-of-concept: one Tauri command that calls `sysinfo` and returns CPU name to the frontend, displayed as plain text
-- [ ] Git repo initialized, `.gitignore` for `target/`, `node_modules/`, `dist/`
+- [x] Scaffold Tauri v2 + React + TypeScript + Vite + Tailwind project
+- [ ] ~~Confirm `npm run tauri dev` runs a blank window~~ → superseded by CI-first workflow: verify via CI-built exe on Prince's machine (`docs/ground-truth/phase0-checklist.md`)
+- [x] Set up `react-i18next` with `en.json`/`bn.json` tables (+ bundled Noto Sans Bengali fonts)
+- [x] Basic Rust proof-of-concept: one Tauri command (`scan_hardware_basic`) calls `sysinfo`, returns CPU name to the frontend *(sysinfo 0.37: physical-core count deferred to WMI in Phase 1)*
+- [x] Git repo initialized, `.gitignore` for `target/`, `node_modules/`, `dist/`
+- [x] CI/CD live: `ci.yml` green · `e2e.yml` (Windows WebDriver, nightly + manual) · `release.yml` (tag → draft release)
+- [ ] **PENDING PRINCE:** run ground-truth checklist on ProBook (download exe from E2E workflow artifacts)
 
 **Exit criteria:** a running window that shows your real CPU name, pulled from Rust.
 

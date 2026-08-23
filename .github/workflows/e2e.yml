@@ -59,6 +59,17 @@ jobs:
       - name: Build app (debug)
         run: npm run tauri build -- --debug
 
+      # Upload the built exe so Prince can ground-truth test it on real
+      # hardware without any local Rust toolchain.
+      - name: Upload debug exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-debug-build
+          path: |
+            src-tauri/target/debug/asol-naki.exe
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Run WebDriver suite
         run: npm test
         working-directory: e2e
