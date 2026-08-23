@@ -47,12 +47,11 @@ jobs:
         working-directory: e2e
 
       # Debug build with the embedded-WebDriver feature; much faster than a
-      # release build and gives readable failures. The feature adds ONLY the
-      # test driver plugin — production release builds never enable it.
+      # release build and gives readable failures. --no-bundle skips installer
+      # packaging (E2E + ground-truth only need the raw exe). The feature adds
+      # ONLY the test driver plugin — release builds never enable it.
       - name: Build app (debug, wdio feature)
-        run: npm run tauri build -- --debug --features wdio
-        env:
-          TAURI_ENV_DEBUG: "true"
+        run: npm run tauri build -- --debug --features wdio --no-bundle
 
       # Upload the built exe so Prince can ground-truth test it on real
       # hardware without any local Rust toolchain.
