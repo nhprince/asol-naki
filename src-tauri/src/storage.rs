@@ -117,7 +117,7 @@ pub fn parse_smartctl_json(json: &str) -> StorageInfo {
 
     // NVMe namespace: smart_health_information.percent_used etc.
     if let Some(nvme) = v.get("nvme_smart_health_information_log") {
-        info.nvme_percentage_used = num_f64(nvme, "percent_used");
+        info.nvme_percentage_used = num_f64(nvme, "percentage_used");
         info.media_errors = nvme.get("media_errors").and_then(|x| x.as_u64());
         info.power_on_hours = nvme.get("power_on_hours").and_then(|x| x.as_u64());
         info.temperature_c = num_f64(nvme, "temperature");
