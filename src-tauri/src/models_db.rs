@@ -26,7 +26,7 @@ impl KnownModels {
             .expect("bundled known_models.json is valid JSON")
     }
 
-    pub fn from_str(s: &str) -> Result<Self, serde_json::Error> {
+    pub fn parse(s: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(s)
     }
 
@@ -78,7 +78,7 @@ mod tests {
     }
 
     #[test]
-    fn from_str_rejects_garbage() {
-        assert!(KnownModels::from_str("not json").is_err());
+    fn parse_rejects_garbage() {
+        assert!(KnownModels::parse("not json").is_err());
     }
 }
