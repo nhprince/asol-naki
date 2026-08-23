@@ -3,6 +3,7 @@
 pub mod battery;
 pub mod hardware;
 pub mod scoring;
+pub mod storage;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -16,6 +17,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             hardware::scan_hardware_basic,
             battery::scan_battery,
+            storage::scan_storage,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
