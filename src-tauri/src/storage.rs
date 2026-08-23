@@ -124,7 +124,10 @@ pub fn parse_smartctl_json(json: &str) -> StorageInfo {
     }
 
     // ATA attributes table: id.name keyed entries.
-    if let Some(attrs) = v.pointer("/ata_smart_attributes/table").and_then(|t| t.as_array()) {
+    if let Some(attrs) = v
+        .pointer("/ata_smart_attributes/table")
+        .and_then(|t| t.as_array())
+    {
         for attr in attrs {
             let name = attr.get("name").and_then(|n| n.as_str()).unwrap_or("");
             let raw = raw_value(attr);
@@ -158,7 +161,9 @@ fn str_field<'a>(v: &'a serde_json::Value, path: &[&str]) -> Option<String> {
     for seg in path {
         cur = cur.get(seg)?;
     }
-    cur.as_str().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+    cur.as_str()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
 }
 
 fn num_f64(v: &serde_json::Value, key: &str) -> Option<f64> {
@@ -212,8 +217,16 @@ fn split_json_documents(text: &str) -> Vec<String> {
             }
             '}' => {
                 depth -= 1;
-                if depth == 0 && start.is_some() && text[start.unwrap()..idx + 1].contains("\"model_name\"") || depth == 0 && start.is_some() && text[start.unwrap()..idx + 1].contains("\"user_capacity\"") {
-                    docs.push(text[start.unwrap()..=idx].to_string());
+                if depth == 0 {
+                    if let Some(s) = start {
+                        let doc = &text[s..=idx];
+                        // Only keep documents that look like drive reports.
+                        let looks_like_drive =
+                            doc.contains("\"model_name\"") || doc.contains("\"user_capacity\"");
+                        if looks_like_drive {
+                            docs.push(doc.to_string());
+                        }
+                    }
                     start = None;
                 }
             }
@@ -239,7 +252,9 @@ fn run_smartctl_all() -> std::io::Result<String> {
         .map(|p| p.join("resources/smartctl/smartctl.exe"))
         .unwrap_or_else(|| std::path::PathBuf::from("smartctl.exe"));
 
-    let cmd = if bundled.exists() { bundled } else {
+    let cmd = if bundled.exists() {
+        bundled
+    } else {
         std::path::PathBuf::from("smartctl")
     };
 
@@ -329,7 +344,10 @@ mod tests {
         s.pending_sector_count = Some(0);
         s.realloc_sector_count = Some(50);
         let score = s.subscore();
-        assert!(score < 6.0 && score > 0.0, "realloc=50 should hurt: {score}");
+        assert!(
+            score < 6.0 && score > 0.0,
+            "realloc=50 should hurt: {score}"
+        );
     }
 
     #[test]
