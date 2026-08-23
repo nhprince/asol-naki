@@ -1,14 +1,10 @@
 import { $, expect, browser } from "@wdio/globals";
-import { invoke } from "@tauri-apps/api/core";
 
 /**
- * Phase 2 exit gate, end-to-end on real Windows: feed a deliberately
- * spoofed device profile through the PRODUCTION run_integrity_checks
- * command (same IPC the UI uses) and assert it raises Critical flags.
- *
- * The runner's hardware is honest, so we fabricate the classic scam:
- * firmware string claims a big CPU while OS-visible thread count betrays
- * an entry-class chip.
+ * Phase 2 exit gate, end-to-end on real Windows: feed deliberately spoofed
+ * device profiles through the PRODUCTION run_integrity_checks command —
+ * executed inside the app's webview (same IPC the UI uses) — and assert
+ * Critical flags fire for scams while honest profiles stay clean.
  */
 describe("Phase 2 — fraud detection", () => {
   it("flags a spoofed CPU identity as CRITICAL via production IPC", async () => {
@@ -23,17 +19,25 @@ describe("Phase 2 — fraud detection", () => {
       hostname: "SCAM-MACHINE",
     };
 
-    const report = await invoke<{
-      flags: { severity: string; check_id: string }[];
-      has_critical: boolean;
-    }>("run_integrity_checks", {
-      hardwareJson: JSON.stringify(spoofed),
-      storageJson: [],
-    });
+    const report = await browser.executeAsync(
+      (hwJson, done) => {
+        // @ts-expect-error injected Tauri global inside the webview
+        window.__TAURI_INTERNALS__
+          .invoke("run_integrity_checks", {
+            hardwareJson: hwJson,
+            storageJson: [],
+          })
+          .then(done)
+          .catch((e: unknown) => done({ error: String(e) }));
+      },
+      JSON.stringify(spoofed),
+    );
 
     await browser.saveScreenshot("./screenshots/spoof-check.png");
-    expect(report.has_critical).toBe(true);
-    const ids = report.flags.map((f) => f.check_id);
+    const r = report as { flags?: { check_id: string }[]; has_critical?: boolean; error?: string };
+    expect(r.error).toBeUndefined();
+    expect(r.has_critical).toBe(true);
+    const ids = (r.flags ?? []).map((f) => f.check_id);
     expect(ids).toContain("cpu_thread_count_mismatch");
     expect(ids).toContain("cpu_core_count_mismatch");
   });
@@ -51,15 +55,23 @@ describe("Phase 2 — fraud detection", () => {
       hostname: "PROBOOK-G11",
     };
 
-    const report = await invoke<{
-      flags: unknown[];
-      has_critical: boolean;
-    }>("run_integrity_checks", {
-      hardwareJson: JSON.stringify(honest),
-      storageJson: [],
-    });
+    const report = await browser.executeAsync(
+      (hwJson, done) => {
+        // @ts-expect-error injected Tauri global inside the webview
+        window.__TAURI_INTERNALS__
+          .invoke("run_integrity_checks", {
+            hardwareJson: hwJson,
+            storageJson: [],
+          })
+          .then(done)
+          .catch((e: unknown) => done({ error: String(e) }));
+      },
+      JSON.stringify(honest),
+    );
 
-    expect(report.has_critical).toBe(false);
-    expect(report.flags.length).toBe(0);
+    const r = report as { flags?: unknown[]; has_critical?: boolean; error?: string };
+    expect(r.error).toBeUndefined();
+    expect(r.has_critical).toBe(false);
+    expect(r.flags?.length ?? -1).toBe(0);
   });
 });
