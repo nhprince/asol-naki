@@ -1,17 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageToggle } from "./components/LanguageToggle";
-
-interface BasicHardwareInfo {
-  cpu_name: string;
-  cpu_threads: number;
-  total_memory_mb: number;
-  os_name: string;
-  os_version: string;
-  kernel_version: string;
-  hostname: string;
-}
+import { useScan } from "./lib/useScan";
+import type { StorageInfo } from "./lib/types";
 
 function formatMemory(mb: number, locale: string): string {
   return new Intl.NumberFormat(locale === "bn" ? "bn-BD" : "en-US", {
@@ -19,31 +10,30 @@ function formatMemory(mb: number, locale: string): string {
   }).format(mb);
 }
 
+function formatCapacity(bytes: number | undefined): string {
+  if (!bytes) return "—";
+  const gb = bytes / 1024 ** 3;
+  return `${gb >= 100 ? Math.round(gb) : gb.toFixed(1)} GB`;
+}
+
+const VERDICT_KEY: Record<string, string> = {
+  "good-buy": "score.verdictGoodBuy",
+  negotiate: "score.verdictNegotiate",
+  "walk-away": "score.verdictWalkAway",
+};
+
 export function App() {
   const { t, i18n } = useTranslation();
-  const [info, setInfo] = useState<BasicHardwareInfo | null>(null);
-  const [scanning, setScanning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const runScan = useCallback(async () => {
-    setScanning(true);
-    setError(null);
-    try {
-      const result = await invoke<BasicHardwareInfo>("scan_hardware_basic");
-      setInfo(result);
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setScanning(false);
-    }
-  }, []);
+  const scan = useScan();
+  const runScan = scan.run;
 
   // Auto-scan on launch so the window never looks empty.
   useEffect(() => {
     void runScan();
   }, [runScan]);
 
-  const bnDigits = i18n.language === "bn";
+  const rescan = useCallback(() => void runScan(), [runScan]);
+  const bn = i18n.language === "bn";
 
   return (
     <div className="min-h-full bg-gradient-to-b from-brand-700 to-brand-900 text-white">
@@ -60,72 +50,173 @@ export function App() {
         <LanguageToggle />
       </header>
 
-      <main className="mx-auto flex max-w-xl flex-col gap-6 px-6 pb-10">
-        <section className="rounded-2xl bg-white/5 p-6 ring-1 ring-white/10">
-          <h2 className="text-lg font-medium">{t("home.heading")}</h2>
-          <p className="mt-2 text-sm leading-relaxed text-white/70">
-            {t("home.description")}
-          </p>
-          <button
-            type="button"
-            data-testid="scan-button"
-            onClick={() => void runScan()}
-            disabled={scanning}
-            className="mt-5 w-full rounded-xl bg-emerald-500 px-4 py-3 font-semibold text-emerald-950 transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {scanning ? t("scan.running") : t("home.scanButton")}
-          </button>
-        </section>
-
-        {error && (
+      <main className="mx-auto flex max-w-xl flex-col gap-5 px-6 pb-10">
+        {/* Score card */}
+        {scan.score != null && scan.verdict && (
           <section
-            role="alert"
-            className="rounded-2xl bg-red-500/15 p-4 text-sm text-red-200 ring-1 ring-red-400/30"
+            data-testid="score-card"
+            className="rounded-2xl bg-white/10 p-6 text-center ring-1 ring-white/20"
           >
-            <p>{t("error.scanFailed", { message: error })}</p>
-            <button
-              type="button"
-              onClick={() => void runScan()}
-              className="mt-2 rounded-lg bg-red-400/20 px-3 py-1 font-medium hover:bg-red-400/30"
+            <p className="text-xs uppercase tracking-widest text-white/60">
+              {t("score.title")}
+            </p>
+            <p
+              className={`mt-1 text-5xl font-bold ${
+                scan.verdict === "good-buy"
+                  ? "text-emerald-400"
+                  : scan.verdict === "negotiate"
+                    ? "text-amber-300"
+                    : "text-red-400"
+              }`}
             >
-              {t("error.retry")}
-            </button>
+              {scan.score.toFixed(1)}
+              <span className="text-xl text-white/50">/10</span>
+            </p>
+            <p className="mt-1 font-medium">{t(VERDICT_KEY[scan.verdict])}</p>
           </section>
         )}
 
-        {info && (
-          <section className="overflow-hidden rounded-2xl ring-1 ring-white/10">
-            <dl className="divide-y divide-white/5 bg-white/5 text-sm">
+        <button
+          type="button"
+          data-testid="scan-button"
+          onClick={rescan}
+          disabled={scan.running}
+          className="rounded-xl bg-emerald-500 px-4 py-3 font-semibold text-emerald-950 transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {scan.running ? t("scan.running") : t("home.scanButton")}
+        </button>
+
+        {/* Per-section errors — one failed module never hides the rest */}
+        {scan.errors.map((e) => (
+          <p
+            key={e.section}
+            role="alert"
+            className="rounded-lg bg-amber-500/15 px-3 py-2 text-xs text-amber-200 ring-1 ring-amber-400/30"
+          >
+            {t("error.sectionFailed", {
+              section: e.section,
+              message: e.message,
+            })}
+          </p>
+        ))}
+
+        {scan.hardware && (
+          <Section title={t("hostname") + ": " + scan.hardware.hostname}>
+            <Row label={t("scan.cpu")} value={scan.hardware.cpu_name} testId="cpu-name" />
+            {scan.hardware.cpu_cores_physical != null && (
               <Row
-                label={t("scan.cpu")}
-                value={info.cpu_name}
-                testId="cpu-name"
+                label={t("scan.cpuCores")}
+                value={fmtNum(scan.hardware.cpu_cores_physical, bn)}
               />
+            )}
+            <Row label={t("scan.threads")} value={fmtNum(scan.hardware.cpu_threads, bn)} />
+            <Row
+              label={t("scan.memory")}
+              value={`${formatMemory(scan.hardware.total_memory_mb, i18n.language)} MB`}
+              bn={bn}
+            />
+            {scan.hardware.motherboard && (
+              <Row label={t("scan.motherboard")} value={scan.hardware.motherboard} />
+            )}
+            {scan.hardware.bios_vendor && (
               <Row
-                label={t("scan.threads")}
-                value={String(info.cpu_threads)}
-                bn={bnDigits}
+                label={t("scan.bios")}
+                value={
+                  scan.hardware.bios_version
+                    ? `${scan.hardware.bios_vendor} ${scan.hardware.bios_version}`
+                    : scan.hardware.bios_vendor
+                }
               />
-              <Row
-                label={t("scan.memory")}
-                value={`${formatMemory(info.total_memory_mb, i18n.language)} MB`}
-                bn={bnDigits}
-              />
-              <Row
-                label={t("scan.os")}
-                value={`${info.os_name} ${info.os_version}`}
-              />
-              <Row label={t("scan.kernel")} value={info.kernel_version} />
-              <Row label={t("scan.hostname")} value={info.hostname} />
-            </dl>
-          </section>
+            )}
+            {scan.hardware.gpus?.map((g) => (
+              <Row key={g.name} label={t("scan.gpu")} value={g.name} />
+            ))}
+            <Row
+              label={t("scan.os")}
+              value={`${scan.hardware.os_name} ${scan.hardware.os_version}`}
+            />
+          </Section>
         )}
+
+        {scan.battery && (
+          <Section title={t("scan.batteryTitle")}>
+            {scan.battery.health_percent != null && (
+              <Row
+                label={t("scan.batteryHealth")}
+                value={`${fmtNum(Math.round(scan.battery.health_percent), bn)}%`}
+                bn={bn}
+              />
+            )}
+            {scan.battery.design_capacity_mwh != null && (
+              <Row
+                label={t("scan.batteryDesign")}
+                value={`${fmtNum(Math.round(scan.battery.design_capacity_mwh / 1000), bn)} Wh`}
+                bn={bn}
+              />
+            )}
+            {scan.battery.cycle_count != null && (
+              <Row
+                label={t("scan.batteryCycles")}
+                value={fmtNum(scan.battery.cycle_count, bn)}
+                bn={bn}
+              />
+            )}
+          </Section>
+        )}
+
+        {scan.storage?.map((d, i) => (
+          <StorageCard key={`${d.model_name ?? "disk"}-${i}`} d={d} />
+        ))}
 
         <p className="text-center text-xs text-white/40">
           {t("footer.phaseNote")}
         </p>
       </main>
     </div>
+  );
+}
+
+function StorageCard({ d }: { d: StorageInfo }) {
+  const { t } = useTranslation();
+  return (
+    <Section title={t("scan.storageTitle")}>
+      {d.model_name && <Row label={t("scan.storageModel")} value={d.model_name} />}
+      <Row
+        label={t("scan.storageCapacity")}
+        value={formatCapacity(d.total_capacity_bytes)}
+      />
+      {d.smart_status && (
+        <Row label={t("scan.storageStatus")} value={d.smart_status} />
+      )}
+      {d.nvme_percentage_used != null && (
+        <Row
+          label={t("scan.storageUsedPct")}
+          value={`${Math.round(d.nvme_percentage_used)}%`}
+        />
+      )}
+      {d.power_on_hours != null && (
+        <Row label={t("scan.storageHours")} value={String(d.power_on_hours)} />
+      )}
+    </Section>
+  );
+}
+
+function Section({
+  title,
+  children,
+}: {
+  title?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-2xl ring-1 ring-white/10">
+      {title && (
+        <p className="bg-white/10 px-5 py-2 text-xs uppercase tracking-widest text-white/70">
+          {title}
+        </p>
+      )}
+      <dl className="divide-y divide-white/5 bg-white/5 text-sm">{children}</dl>
+    </section>
   );
 }
 
@@ -144,13 +235,24 @@ function Row({
     <div className="flex items-baseline justify-between gap-4 px-5 py-3">
       <dt className="shrink-0 text-white/60">{label}</dt>
       <dd
-        className={`text-right font-medium ${bn ? "bengali-digits" : ""}`}
+        className="text-right font-medium"
         data-testid={testId}
       >
-        {value}
+        {bn ? toBengaliDigits(value) : value}
       </dd>
     </div>
   );
+}
+
+function fmtNum(n: number, _bn: boolean): string {
+  // Digits are localized by toBengaliDigits at render time.
+  return new Intl.NumberFormat("en-US").format(n);
+}
+
+function toBengaliDigits(s: string): string {
+  const map = "০১২৩৪৫৬৭৮৯";
+  if (!/[0-9]/.test(s)) return s;
+  return s.replace(/[0-9]/g, (d) => map[Number(d)]);
 }
 
 export default App;

@@ -11,17 +11,40 @@
   "scan": {
     "running": "হার্ডওয়্যার স্ক্যান চলছে…",
     "cpu": "প্রসেসর",
+    "cpuCores": "ফিজিক্যাল কোর",
     "threads": "থ্রেড",
     "memory": "মেমরি",
     "os": "অপারেটিং সিস্টেম",
     "kernel": "কার্নেল",
-    "hostname": "ডিভাইসের নাম"
+    "hostname": "ডিভাইসের নাম",
+    "motherboard": "মাদারবোর্ড",
+    "bios": "BIOS",
+    "gpu": "গ্রাফিক্স",
+    "gpuVram": "VRAM",
+    "batteryTitle": "ব্যাটারি",
+    "batteryHealth": "স্বাস্থ্য",
+    "batteryDesign": "ডিজাইন ক্যাপাসিটি",
+    "batteryFull": "ফুল-চার্জ ক্যাপাসিটি",
+    "batteryCycles": "চার্জ সাইকেল",
+    "storageTitle": "স্টোরেজ",
+    "storageModel": "মডেল",
+    "storageCapacity": "ক্যাপাসিটি",
+    "storageStatus": "SMART অবস্থা",
+    "storageUsedPct": "ব্যবহৃত জীবনকাল",
+    "storageHours": "চালু ঘণ্টা"
+  },
+  "score": {
+    "title": "বিশ্বাসযোগ্যতা স্কোর",
+    "verdictGoodBuy": "ভালো কেনা — নিশ্চিন্তে নিন",
+    "verdictNegotiate": "দাম কমাতে চেষ্টা করুন",
+    "verdictWalkAway": "কিনবেন না — তথ্য গোপন করা হচ্ছে"
   },
   "error": {
+    "sectionFailed": "{{section}}: {{message}}",
     "scanFailed": "স্ক্যান ব্যর্থ — {{message}}",
     "retry": "আবার চেষ্টা করুন"
   },
   "footer": {
-    "phaseNote": "ফেজ ০ প্রমাণ-অব-কনসেপ্ট — সম্পূর্ণ ডায়াগনস্টিক আসছে ফেজ ১-এ।"
+    "phaseNote": "ফেজ ১ প্রিভিউ — স্টোরেজ ও ব্যাটারি Windows-এ চলবে; স্কোর সময়ের সাথে ক্যালিব্রেট হবে।"
   }
 }

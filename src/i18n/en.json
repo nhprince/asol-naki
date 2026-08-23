@@ -11,17 +11,40 @@
   "scan": {
     "running": "Scanning hardware…",
     "cpu": "Processor",
+    "cpuCores": "Physical cores",
     "threads": "Threads",
     "memory": "Memory",
     "os": "Operating System",
     "kernel": "Kernel",
-    "hostname": "Device name"
+    "hostname": "Device name",
+    "motherboard": "Motherboard",
+    "bios": "BIOS",
+    "gpu": "Graphics",
+    "gpuVram": "VRAM",
+    "batteryTitle": "Battery",
+    "batteryHealth": "Health",
+    "batteryDesign": "Design capacity",
+    "batteryFull": "Full-charge capacity",
+    "batteryCycles": "Cycle count",
+    "storageTitle": "Storage",
+    "storageModel": "Model",
+    "storageCapacity": "Capacity",
+    "storageStatus": "SMART status",
+    "storageUsedPct": "Endurance used",
+    "storageHours": "Power-on hours"
+  },
+  "score": {
+    "title": "Trust score",
+    "verdictGoodBuy": "Good buy",
+    "verdictNegotiate": "Negotiate the price",
+    "verdictWalkAway": "Walk away — misrepresented"
   },
   "error": {
+    "sectionFailed": "{{section}}: {{message}}",
     "scanFailed": "Scan failed — {{message}}",
     "retry": "Try again"
   },
   "footer": {
-    "phaseNote": "Phase 0 proof-of-concept — full diagnostics coming in Phase 1."
+    "phaseNote": "Phase 1 preview — storage & battery need Windows; scoring calibrates over time."
   }
 }
