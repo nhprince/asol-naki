@@ -8,6 +8,8 @@
  * CI builds the app with `--features wdio` and points TAURI_APP_BINARY_PATH
  * at the binary before running this suite.
  */
+import fs from "node:fs";
+
 // WDIO's TS types don't model the tauri service options; plain record keeps
 // typecheck happy while matching the documented shape exactly.
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -55,4 +57,9 @@ export const config: Record<string, any> = {
   reporters: ["spec"],
   outputDir: "./logs",
   logLevel: "info",
+
+  onPrepare() {
+    // saveScreenshot refuses to create parent dirs itself.
+    fs.mkdirSync("./screenshots", { recursive: true });
+  },
 };
