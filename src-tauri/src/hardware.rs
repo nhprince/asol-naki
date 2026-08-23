@@ -124,7 +124,7 @@ fn apply_windows_wmi(info: &mut FullHardwareInfo) {
 #[cfg(windows)]
 fn try_apply_windows_wmi(info: &mut FullHardwareInfo) -> Result<(), wmi::WMIError> {
     use serde::Deserialize;
-    use wmi::COMLib;
+    use wmi::WMIConnection;
 
     #[derive(Deserialize)]
     #[serde(rename_all = "PascalCase")]
@@ -154,8 +154,7 @@ fn try_apply_windows_wmi(info: &mut FullHardwareInfo) -> Result<(), wmi::WMIErro
         driver_version: Option<String>,
     }
 
-    let com = COMLib::create_instance()?;
-    let conn = wmi::WMIConnection::new(com)?;
+    let conn = WMIConnection::new()?;
 
     info.cpu_cores_physical = conn
         .raw_query::<Win32Processor>("SELECT NumberOfCores FROM Win32_Processor")
@@ -165,8 +164,7 @@ fn try_apply_windows_wmi(info: &mut FullHardwareInfo) -> Result<(), wmi::WMIErro
 
     if let Ok(Some(bb)) = conn
         .raw_query::<Win32BaseBoard>("SELECT Manufacturer, Product FROM Win32_BaseBoard")
-        .map(|mut v| v.next())
-        .transpose()
+        .map(|rows| rows.into_iter().next())
     {
         let m = bb.manufacturer.unwrap_or_default().trim().to_string();
         let p = bb.product.unwrap_or_default().trim().to_string();
@@ -178,8 +176,7 @@ fn try_apply_windows_wmi(info: &mut FullHardwareInfo) -> Result<(), wmi::WMIErro
 
     if let Ok(Some(bios)) = conn
         .raw_query::<Win32Bios>("SELECT Manufacturer, SMBIOSBIOSVersion FROM Win32_BIOS")
-        .map(|mut v| v.next())
-        .transpose()
+        .map(|rows| rows.into_iter().next())
     {
         info.bios_vendor = bios
             .manufacturer
