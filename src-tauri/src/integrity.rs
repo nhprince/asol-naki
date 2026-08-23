@@ -81,10 +81,7 @@ pub fn run_checks(
 /// Threads are the strongest independent signal — a relabeled i3 cannot fake
 /// 8 threads because the OS counts them. Only fires when the exact model is
 /// in the DB; unknown models produce no flag (we never guess).
-pub fn check_cpu_identity(
-    hw: &FullHardwareInfo,
-    db: &KnownModels,
-) -> Vec<FraudFlag> {
+pub fn check_cpu_identity(hw: &FullHardwareInfo, db: &KnownModels) -> Vec<FraudFlag> {
     let Some(known) = db.cpu(&hw.cpu_name) else {
         return vec![];
     };
@@ -135,9 +132,7 @@ pub fn check_storage_capacity(storage: &[StorageInfo]) -> Vec<FraudFlag> {
         };
         let gb = bytes as f64 / 1024.0 / 1024.0 / 1024.0;
 
-        if d.protocol.as_deref() == Some("nvme")
-            && d.nvme_percentage_used.is_none()
-            && gb >= 400.0
+        if d.protocol.as_deref() == Some("nvme") && d.nvme_percentage_used.is_none() && gb >= 400.0
         {
             flags.push(FraudFlag {
                 severity: FlagSeverity::Critical,
@@ -197,13 +192,15 @@ mod tests {
     }
 
     fn nvme_1tb_healthy() -> StorageInfo {
-        parse_helper(r#"{
+        parse_helper(
+            r#"{
             "device_protocol": "NVMe",
             "model_name": "Samsung SSD 980 PRO 1TB",
             "user_capacity": {"bytes": 1000204886016},
             "smart_status": {"passed": true},
             "nvme_smart_health_information_log": {"percentage_used": 3}
-        }"#)
+        }"#,
+        )
     }
 
     fn parse_helper(json: &str) -> StorageInfo {
@@ -265,12 +262,14 @@ mod tests {
     #[test]
     fn fake_nvme_missing_endurance_flagged() {
         let db = KnownModels::embedded();
-        let fake = parse_helper(r#"{
+        let fake = parse_helper(
+            r#"{
             "device_protocol": "NVMe",
             "model_name": "Generic SSD 1TB",
             "user_capacity": {"bytes": 512110190592},
             "smart_status": {"passed": true}
-        }"#);
+        }"#,
+        );
         let r = run_checks(&honest_hw(), &[fake], &db);
         assert!(r.has_critical);
         assert!(r.flags.iter().any(|f| f.check_id == "fake_nvme_capacity"));
@@ -279,12 +278,14 @@ mod tests {
     #[test]
     fn tiny_nvme_flagged_absurd() {
         let db = KnownModels::embedded();
-        let tiny = parse_helper(r#"{
+        let tiny = parse_helper(
+            r#"{
             "device_protocol": "NVMe",
             "model_name": "SuperSpeed 8GB",
             "user_capacity": {"bytes": 8000000000},
             "nvme_smart_health_information_log": {"percentage_used": 1}
-        }"#);
+        }"#,
+        );
         let r = run_checks(&honest_hw(), &[tiny], &db);
         assert!(r.has_critical);
         assert!(r.flags.iter().any(|f| f.check_id == "absurd_nvme_capacity"));
