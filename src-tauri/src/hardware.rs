@@ -188,9 +188,9 @@ fn try_apply_windows_wmi(info: &mut FullHardwareInfo) -> Result<(), wmi::WMIErro
             .filter(|s| !s.is_empty());
     }
 
-    if let Ok(gpus) =
-        conn.raw_query::<Win32VideoController>("SELECT Name, AdapterRAM, DriverVersion FROM Win32_VideoController")
-    {
+    if let Ok(gpus) = conn.raw_query::<Win32VideoController>(
+        "SELECT Name, AdapterRAM, DriverVersion FROM Win32_VideoController",
+    ) {
         let list: Vec<GpuInfo> = gpus
             .into_iter()
             .filter_map(|g| {
