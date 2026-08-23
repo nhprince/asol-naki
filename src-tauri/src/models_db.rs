@@ -64,7 +64,9 @@ mod tests {
     fn probook_cpu_is_known() {
         // Prince's dev machine — the primary ground-truth target.
         let db = KnownModels::embedded();
-        let cpu = db.cpu("Intel Core Ultra 5 125H").expect("Ultra 5 125H in DB");
+        let cpu = db
+            .cpu("Intel Core Ultra 5 125H")
+            .expect("Ultra 5 125H in DB");
         assert_eq!(cpu.expected_cores, 14);
         assert_eq!(cpu.expected_threads, 18);
     }

@@ -32,12 +32,8 @@ pub struct IntegrityReport {
 
 impl IntegrityReport {
     fn from_flags(flags: Vec<FraudFlag>) -> Self {
-        let has_critical = flags
-            .iter()
-            .any(|f| f.severity == FlagSeverity::Critical);
-        let has_warning = flags
-            .iter()
-            .any(|f| f.severity == FlagSeverity::Warning);
+        let has_critical = flags.iter().any(|f| f.severity == FlagSeverity::Critical);
+        let has_warning = flags.iter().any(|f| f.severity == FlagSeverity::Warning);
         IntegrityReport {
             flags,
             has_critical,
@@ -58,8 +54,7 @@ pub fn run_integrity_checks(
     hardware_json: String,
     storage_json: Vec<String>,
 ) -> Result<IntegrityReport, String> {
-    let hw: FullHardwareInfo =
-        serde_json::from_str(&hardware_json).map_err(|e| e.to_string())?;
+    let hw: FullHardwareInfo = serde_json::from_str(&hardware_json).map_err(|e| e.to_string())?;
     let storage: Vec<StorageInfo> = storage_json
         .iter()
         .map(|s| serde_json::from_str(s))
@@ -292,22 +287,21 @@ mod tests {
         }"#);
         let r = run_checks(&honest_hw(), &[tiny], &db);
         assert!(r.has_critical);
-        assert!(r
-            .flags
-            .iter()
-            .any(|f| f.check_id == "absurd_nvme_capacity"));
+        assert!(r.flags.iter().any(|f| f.check_id == "absurd_nvme_capacity"));
     }
 
     #[test]
     fn sata_drive_without_nvme_endurance_not_fake_flagged() {
         // The fake-capacity heuristic only applies to NVMe protocol.
         let db = KnownModels::embedded();
-        let sata = parse_helper(r#"{
+        let sata = parse_helper(
+            r#"{
             "device_protocol": "ATA",
             "model_name": "WDC WD10SPZX",
             "user_capacity": {"bytes": 1000204886016},
             "smart_status": {"passed": true}
-        }"#);
+        }"#,
+        );
         let r = run_checks(&honest_hw(), &[sata], &db);
         assert!(!r.has_critical, "flags: {:?}", r.flags);
     }
