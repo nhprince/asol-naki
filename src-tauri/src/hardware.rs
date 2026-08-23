@@ -86,6 +86,9 @@ pub fn collect_full_info(sys: &mut System) -> FullHardwareInfo {
     let kernel_version = System::kernel_version().unwrap_or_default();
     let hostname = System::host_name().unwrap_or_else(|| "Unknown".to_string());
 
+    // `mut` is only exercised by the Windows WMI backend; allowed here so
+    // the non-Windows CI job (where identity stays honestly None) is clean.
+    #[allow(unused_mut)]
     let mut info = FullHardwareInfo {
         cpu_name,
         cpu_threads: sys.cpus().len(),
@@ -103,9 +106,6 @@ pub fn collect_full_info(sys: &mut System) -> FullHardwareInfo {
 
     #[cfg(windows)]
     apply_windows_wmi(&mut info);
-    // Silence unused_mut on non-Windows builds where nothing mutates `info`.
-    #[cfg(not(windows))]
-    let info = info;
 
     info
 }
