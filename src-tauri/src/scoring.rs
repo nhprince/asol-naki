@@ -16,7 +16,9 @@ pub struct CategoryScores {
     pub ports_connectivity: f64,
 }
 
-/// Weights per plan.md §7. Ports weight is implied remainder so the total is 1.0.
+/// Weights per plan.md §7, exactly as specified there. Note they sum to 0.95
+/// (fraud consistency is a Gate, not a weighted category); compute_score
+/// normalizes by the actual sum so a perfect device still scores 10.
 pub const WEIGHTS: StorageWeights = StorageWeights {
     storage: 0.25,
     cpu_gpu_sanity: 0.25,
@@ -64,11 +66,27 @@ pub fn compute_score(
     weights: &StorageWeights,
     critical_flag: bool,
 ) -> ScoreResult {
-    let weighted = categories.storage * weights.storage
+    let total_weight = weights.storage
+        + weights.cpu_gpu_sanity
+        + weights.battery
+        + weights.display
+        + weights.ports_connectivity;
+
+    // plan.md §7 weights sum to 0.95 (fraud is a gate, not a weighted
+    // category). Normalize so the scale stays 0–10; guard against an
+    // all-zero weight config.
+    let norm = if total_weight > f64::EPSILON {
+        1.0 / total_weight
+    } else {
+        1.0
+    };
+
+    let weighted = (categories.storage * weights.storage
         + categories.cpu_gpu_sanity * weights.cpu_gpu_sanity
         + categories.battery * weights.battery
         + categories.display * weights.display
-        + categories.ports_connectivity * weights.ports_connectivity;
+        + categories.ports_connectivity * weights.ports_connectivity)
+        * norm;
 
     let mut score = weighted.clamp(0.0, 10.0);
     let mut capped = false;
