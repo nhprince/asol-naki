@@ -124,7 +124,7 @@ fn apply_windows_wmi(info: &mut FullHardwareInfo) {
 #[cfg(windows)]
 fn try_apply_windows_wmi(info: &mut FullHardwareInfo) -> Result<(), wmi::WMIError> {
     use serde::Deserialize;
-    use wmi::WMIConnection;
+    use wmi::COMLibrary;
 
     #[derive(Deserialize)]
     #[serde(rename_all = "PascalCase")]
@@ -154,7 +154,7 @@ fn try_apply_windows_wmi(info: &mut FullHardwareInfo) -> Result<(), wmi::WMIErro
         driver_version: Option<String>,
     }
 
-    let conn = WMIConnection::new()?;
+    let conn = wmi::WMIConnection::new(COMLibrary::without_security()?)?;
 
     info.cpu_cores_physical = conn
         .raw_query::<Win32Processor>("SELECT NumberOfCores FROM Win32_Processor")
