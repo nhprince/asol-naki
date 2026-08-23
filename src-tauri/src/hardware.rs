@@ -103,6 +103,9 @@ pub fn collect_full_info(sys: &mut System) -> FullHardwareInfo {
 
     #[cfg(windows)]
     apply_windows_wmi(&mut info);
+    // Silence unused_mut on non-Windows builds where nothing mutates `info`.
+    #[cfg(not(windows))]
+    let info = info;
 
     info
 }
