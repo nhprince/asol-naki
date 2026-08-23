@@ -9,6 +9,7 @@ ROADMAP checkboxes get ticked only when CI is green AND ground-truth verified.
 
 | Date (UTC) | Commit | Change | Verification |
 |---|---|---|---|
+| 2026-08-23 | 3c9eb30 | **PHASE 2 START — fraud engine:** integrity.rs (CPU thread/core identity vs OS counts → Critical; fake-NVMe-capacity + absurd-capacity heuristics), models_db.rs (11 BD-market CPUs embedded, case-insensitive lookup), `run_integrity_checks` command (JSON-in → E2E can feed spoofed fixtures). **Exit gate proven in tests:** spoofed CPU fixture raises Critical, score capped at 3.0 | CI 32659287426 ✅ (26 rust tests) |
 | 2026-08-23 | cd9376e | **UI:** full scan (parallel `Promise.allSettled`, per-section errors), score card + verdict colors, storage/battery/WMI sections, BN digits | CI 32655584137 ✅ · local tsc/vitest/build ✅ |
 | 2026-08-23 | cecaf16 | **hardware.rs full pull:** WMI GPU/motherboard/BIOS/physical-cores (Windows-gated, degrades to None honestly), `scan_hardware_full` command. Fixes: rustfmt, unused_mut allow | CI 32655208207 ✅ |
 | 2026-08-23 | 5b3d50e | **storage.rs:** smartctl JSON parser (NVMe+ATA), wear scoring (realloc/pending/media/percentage_used), `scan_storage` command, 5 tests. Fixes: percentage_used field name, clippy lints, f64 annotation | CI 32654628579 ✅ (19 rust tests) |
