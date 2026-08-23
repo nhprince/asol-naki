@@ -22,7 +22,7 @@ CI proves code compiles + logic passes; ONLY you can prove it reflects real hard
 | 3 | Bengali text renders (no boxes □□) | proper বাংলা glyphs | ☐ |
 | 4 | Auto-scan completes within ~3 s | results table appears | ☐ |
 | 5 | CPU name | matches Task Manager → Performance → CPU | ☐ |
-| 6 | Cores / Threads | match Task Manager | ☐ |
+| 6 | Threads (logical CPUs) | match Task Manager | ☐ |
 | 7 | Memory MB | ≈ RAM in Settings → About (MB vs GB rounding) | ☐ |
 | 8 | OS name/version | match winver | ☐ |
 | 9 | Language toggle EN→BN→EN | all strings switch, layout holds | ☐ |

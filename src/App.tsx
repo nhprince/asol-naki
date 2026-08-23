@@ -5,7 +5,6 @@ import { LanguageToggle } from "./components/LanguageToggle";
 
 interface BasicHardwareInfo {
   cpu_name: string;
-  cpu_cores: number;
   cpu_threads: number;
   total_memory_mb: number;
   os_name: string;
@@ -101,11 +100,6 @@ export function App() {
                 label={t("scan.cpu")}
                 value={info.cpu_name}
                 testId="cpu-name"
-              />
-              <Row
-                label={t("scan.cores")}
-                value={String(info.cpu_cores)}
-                bn={bnDigits}
               />
               <Row
                 label={t("scan.threads")}

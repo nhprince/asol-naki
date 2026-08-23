@@ -9,7 +9,6 @@ use sysinfo::System;
 #[derive(Debug, Serialize)]
 pub struct BasicHardwareInfo {
     pub cpu_name: String,
-    pub cpu_cores: usize,
     pub cpu_threads: usize,
     pub total_memory_mb: u64,
     pub os_name: String,
@@ -42,7 +41,9 @@ pub fn collect_basic_info(sys: &mut System) -> BasicHardwareInfo {
 
     BasicHardwareInfo {
         cpu_name: cpu,
-        cpu_cores: sys.physical_core_count().unwrap_or(0),
+        // NOTE(sysinfo 0.37): physical_core_count() no longer exists here.
+        // Authoritative physical-core data comes in Phase 1 via Windows WMI
+        // (Win32_Processor.NumberOfCores) inside the full hardware module.
         cpu_threads: sys.cpus().len(),
         total_memory_mb: sys.total_memory() / (1024 * 1024),
         os_name,
@@ -69,9 +70,6 @@ mod tests {
         assert!(!info.cpu_name.is_empty());
         // sysinfo reports at least one logical CPU everywhere.
         assert!(info.cpu_threads >= 1);
-        if info.cpu_cores > 0 {
-            assert!(info.cpu_cores <= info.cpu_threads);
-        }
         assert!(!info.os_name.is_empty());
     }
 }
