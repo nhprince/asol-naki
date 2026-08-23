@@ -9,7 +9,8 @@ ROADMAP checkboxes get ticked only when CI is green AND ground-truth verified.
 
 | Date (UTC) | Commit | Change | Verification |
 |---|---|---|---|
-| 2026-08-23 | c58d01a | **P1 start.** scoring.rs: weighted 0-10 engine, critical-fraud cap @3.0, battery/storage sub-score curves (9 tests). Fix: normalize by weight sum — plan §7 weights total 0.95 (fraud = gate), test now locks spec | CI 32653725221 ✅ (14 rust tests) |
+| 2026-08-23 | 5b3d50e | **storage.rs:** smartctl JSON parser (NVMe+ATA), wear scoring (realloc/pending/media/percentage_used), `scan_storage` command, 5 tests. Fixes: percentage_used field name, clippy lints, f64 annotation | CI 32654628579 ✅ (19 rust tests) |
+| 2026-08-23 | c58d01a | scoring.rs: weighted 0-10 engine, critical-fraud cap @3.0, battery/storage sub-score curves (9 tests). Fix: normalize by weight sum — plan §7 weights total 0.95 (fraud = gate), test now locks spec | CI 32653725221 ✅ (14 rust tests) |
 | 2026-08-23 | 73f3c47 → 85f96d5 | battery.rs: powercfg /XML parser (fixture-tested, tolerant); Windows shell-out isolated; `scan_battery` command; rustfmt applied | CI ✅ after fmt + test fixes |
 | 2026-08-23 | a6ce732 | docs/PROGRESS.md created; session discipline added to CLAUDE.md | push ✅ |
 | 2026-08-23 | a06d5ee | ROADMAP Phase 0 boxes marked; CI+E2E declared green | CI 32632023384 ✅ · E2E 32631550731 ✅ (3/3 on Windows) |
