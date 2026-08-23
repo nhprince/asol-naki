@@ -16,6 +16,7 @@ pub fn run() {
     builder
         .invoke_handler(tauri::generate_handler![
             hardware::scan_hardware_basic,
+            hardware::scan_hardware_full,
             battery::scan_battery,
             storage::scan_storage,
         ])
