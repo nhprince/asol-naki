@@ -1,0 +1,72 @@
+{
+  "$comment": "Known-models spec DB for fraud consistency checks (plan.md §6). CPU entries keyed by lowercase model string; expected_* fields are the ground truth that a spoofed/relabeled CPU would contradict. Extend with BD-market models over time — online updates come in Phase 5.",
+  "version": 1,
+  "cpus": {
+    "intel core ultra 5 125h": {
+      "expected_cores": 14,
+      "expected_threads": 18,
+      "cache_mb": 18,
+      "family": "Meteor Lake"
+    },
+    "intel core i5-1335u": {
+      "expected_cores": 10,
+      "expected_threads": 12,
+      "cache_mb": 12,
+      "family": "Raptor Lake"
+    },
+    "intel core i5-1235u": {
+      "expected_cores": 10,
+      "expected_threads": 12,
+      "cache_mb": 12,
+      "family": "Alder Lake"
+    },
+    "intel core i7-1355u": {
+      "expected_cores": 10,
+      "expected_threads": 12,
+      "cache_mb": 12,
+      "family": "Raptor Lake"
+    },
+    "intel core i7-1165g7": {
+      "expected_cores": 4,
+      "expected_threads": 8,
+      "cache_mb": 12,
+      "family": "Tiger Lake"
+    },
+    "intel core i5-1035g1": {
+      "expected_cores": 4,
+      "expected_threads": 8,
+      "cache_mb": 6,
+      "family": "Ice Lake"
+    },
+    "intel core i3-1005g1": {
+      "expected_cores": 2,
+      "expected_threads": 4,
+      "cache_mb": 4,
+      "family": "Ice Lake"
+    },
+    "amd ryzen 5 5500u": {
+      "expected_cores": 6,
+      "expected_threads": 12,
+      "cache_mb": 8,
+      "family": "Cezanne"
+    },
+    "amd ryzen 5 5625u": {
+      "expected_cores": 6,
+      "expected_threads": 12,
+      "cache_mb": 16,
+      "family": "Barcelo"
+    },
+    "amd ryzen 7 5700u": {
+      "expected_cores": 8,
+      "expected_threads": 16,
+      "cache_mb": 8,
+      "family": "Lucienne"
+    },
+    "amd ryzen 5 7530u": {
+      "expected_cores": 6,
+      "expected_threads": 12,
+      "cache_mb": 16,
+      "family": "Rembrandt-R"
+    }
+  }
+}
