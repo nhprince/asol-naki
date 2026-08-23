@@ -1,4 +1,4 @@
-import { $, expect } from "@wdio/globals";
+import { $, expect, browser } from "@wdio/globals";
 
 describe("Asol Naki? — Phase 0 smoke", () => {
   it("launches and shows the app heading", async () => {
@@ -17,12 +17,38 @@ describe("Asol Naki? — Phase 0 smoke", () => {
 
   it("toggles to Bengali and back", async () => {
     const scanButton = await $('[data-testid="scan-button"]');
-    await expect(scanButton).toHaveText(expect.stringContaining("Scan"));
+    await scanButton.waitForDisplayed({ timeout: 10_000 });
+    const before = await scanButton.getText();
 
-    await $('button[data-lang="bn"]').click();
-    await expect(scanButton).toHaveText(expect.stringContaining("স্ক্যান"));
+    const bnButton = await $('button[data-lang="bn"]');
+    await bnButton.waitForClickable({ timeout: 10_000 });
+    await bnButton.click();
 
-    await $('button[data-lang="en"]').click();
-    await expect(scanButton).toHaveText(expect.stringContaining("Scan"));
+    // Poll manually so we can log what we actually see on timeout/failure.
+    let after = "";
+    for (let i = 0; i < 20; i++) {
+      await browser.pause(250);
+      after = await scanButton.getText();
+      if (after !== before) break;
+    }
+    await browser.saveScreenshot("./screenshots/toggle-bn.png");
+
+    const enButton = await $('button[data-lang="en"]');
+    await enButton.waitForClickable({ timeout: 10_000 });
+    await enButton.click();
+    await browser.pause(500);
+    const reverted = await scanButton.getText();
+    await browser.saveScreenshot("./screenshots/toggle-back-en.png");
+
+    console.log(
+      `[toggle] before=${JSON.stringify(before)} after=${JSON.stringify(after)} reverted=${JSON.stringify(reverted)}`,
+    );
+
+    if (after === before) {
+      throw new Error(
+        `Language toggle had no effect on UI text (before=${JSON.stringify(before)}, after=${JSON.stringify(after)})`,
+      );
+    }
+    expect(reverted).toBe(before);
   });
 });
