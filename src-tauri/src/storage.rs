@@ -35,7 +35,7 @@ impl StorageInfo {
     /// 0–10 sub-score. Healthy pass = 10; deductions for wear signals.
     /// Calibration expected to change after ground-truth testing.
     pub fn subscore(&self) -> f64 {
-        let mut score = match self.smart_status.as_deref() {
+        let mut score: f64 = match self.smart_status.as_deref() {
             Some(s) if s.eq_ignore_ascii_case("failed") => 0.0,
             _ => 10.0,
         };
