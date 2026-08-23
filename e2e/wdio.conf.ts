@@ -1,23 +1,26 @@
-import type { Options } from "@wdio/types";
-
 /**
  * WebdriverIO config driving the REAL compiled Tauri app via the
- * official @wdio/tauri-service (embedded WebDriver server; on Windows it
- * keeps msedgedriver in sync with WebView2 automatically).
+ * official @wdio/tauri-service in "embedded" mode: the W3C WebDriver
+ * server runs INSIDE the app (via the feature-gated
+ * tauri-plugin-wdio-webdriver crate) — no external tauri-driver or
+ * msedgedriver install needed, on any platform.
  *
- * The service builds/locates the binary via TAURI_APP_BINARY_PATH or its
- * appBinaryPath option — set by CI after `tauri build --debug`.
+ * CI builds the app with `--features wdio` and points TAURI_APP_BINARY_PATH
+ * at the binary before running this suite.
  */
-export const config: Options.Testrunner = {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const config: Record<string, any> = {
   runner: "local",
   specs: ["./specs/**/*.spec.ts"],
   maxInstances: 1, // one app window at a time
   capabilities: [
     {
       "tauri:options": {
-        appBinaryPath: process.env.TAURI_APP_BINARY_PATH ?? "",
+        appBinaryPath:
+          process.env.TAURI_APP_BINARY_PATH ??
+          "./src-tauri/target/debug/asol-naki.exe",
       },
-    } as never,
+    },
   ],
   services: [["tauri", { driverProvider: "embedded" }]],
   framework: "mocha",
@@ -29,3 +32,5 @@ export const config: Options.Testrunner = {
   outputDir: "./logs",
   logLevel: "info",
 };
+
+export default config;

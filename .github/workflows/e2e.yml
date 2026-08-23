@@ -1,7 +1,8 @@
-# E2E — real compiled app driven over WebDriver on a real Windows runner.
+# E2E — the REAL compiled app driven over WebDriver on a real Windows runner.
+# Uses @wdio/tauri-service in "embedded" mode: the WebDriver server lives
+# inside the app (tauri-plugin-wdio-webdriver, enabled via the `wdio` cargo
+# feature) — no external tauri-driver or msedgedriver needed.
 # Runs on PRs touching app code, nightly on main, or manually.
-# Based on the official Tauri WebDriver CI guide:
-# https://v2.tauri.app/develop/tests/webdriver/ci/
 name: E2E
 
 on:
@@ -38,13 +39,6 @@ jobs:
           node-version: 22
           cache: npm
 
-      # Keeps the Microsoft Edge WebDriver in sync with the runner's WebView2.
-      - name: Install msedgedriver (Windows)
-        run: |
-          cargo install --git https://github.com/chippers/msedgedriver-tool
-          & "$HOME/.cargo/bin/msedgedriver-tool.exe"
-          $PWD.Path >> $env:GITHUB_PATH
-
       - name: Install dependencies (root)
         run: npm ci
 
@@ -52,12 +46,13 @@ jobs:
         run: npm ci
         working-directory: e2e
 
-      - name: Install tauri-driver
-        run: cargo install tauri-driver --locked
-
-      # Debug build: much faster than release and gives readable failures.
-      - name: Build app (debug)
-        run: npm run tauri build -- --debug
+      # Debug build with the embedded-WebDriver feature; much faster than a
+      # release build and gives readable failures. The feature adds ONLY the
+      # test driver plugin — production release builds never enable it.
+      - name: Build app (debug, wdio feature)
+        run: npm run tauri build -- --debug --features wdio
+        env:
+          TAURI_ENV_DEBUG: "true"
 
       # Upload the built exe so Prince can ground-truth test it on real
       # hardware without any local Rust toolchain.
@@ -65,14 +60,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-debug-build
-          path: |
-            src-tauri/target/debug/asol-naki.exe
+          path: src-tauri/target/debug/asol-naki.exe
           if-no-files-found: error
           retention-days: 14
 
       - name: Run WebDriver suite
         run: npm test
         working-directory: e2e
+        env:
+          TAURI_APP_BINARY_PATH: ${{ github.workspace }}/src-tauri/target/debug/asol-naki.exe
 
       - name: Upload failure evidence
         if: failure()
