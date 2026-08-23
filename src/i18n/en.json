@@ -37,7 +37,18 @@
     "title": "Trust score",
     "verdictGoodBuy": "Good buy",
     "verdictNegotiate": "Negotiate the price",
-    "verdictWalkAway": "Walk away — misrepresented"
+    "verdictWalkAway": "Walk away — misrepresented",
+    "cappedNote": "Score capped — critical fraud indicators found"
+  },
+  "fraud": {
+    "title": "Fraud & consistency checks",
+    "cpuThreadMismatch": "CPU identity mismatch: reported model does not match the thread count the OS actually sees",
+    "cpuCoreMismatch": "CPU identity mismatch: physical core count contradicts the reported model",
+    "fakeNvmeCapacity": "Suspicious SSD: claims large NVMe capacity but reports no endurance data (classic fake-capacity flash)",
+    "absurdCapacity": "Absurd capacity: drive is far too small to be a real laptop SSD",
+    "severityCritical": "CRITICAL",
+    "severityWarning": "WARNING",
+    "severityInfo": "INFO"
   },
   "error": {
     "sectionFailed": "{{section}}: {{message}}",

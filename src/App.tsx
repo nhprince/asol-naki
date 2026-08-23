@@ -62,17 +62,67 @@ export function App() {
             </p>
             <p
               className={`mt-1 text-5xl font-bold ${
-                scan.verdict === "good-buy"
-                  ? "text-emerald-400"
+                scan.cappedByCritical || scan.verdict === "walk-away"
+                  ? "text-red-400"
                   : scan.verdict === "negotiate"
                     ? "text-amber-300"
-                    : "text-red-400"
+                    : "text-emerald-400"
               }`}
             >
               {scan.score.toFixed(1)}
               <span className="text-xl text-white/50">/10</span>
             </p>
             <p className="mt-1 font-medium">{t(VERDICT_KEY[scan.verdict])}</p>
+            {scan.cappedByCritical && (
+              <p className="mt-2 rounded-lg bg-red-500/20 px-3 py-1 text-xs text-red-200">
+                {t("score.cappedNote")}
+              </p>
+            )}
+          </section>
+        )}
+
+        {/* Fraud flags */}
+        {scan.flags.length > 0 && (
+          <section
+            data-testid="fraud-flags"
+            className="overflow-hidden rounded-2xl ring-1 ring-white/10"
+          >
+            <p className="bg-white/10 px-5 py-2 text-xs uppercase tracking-widest text-white/70">
+              {t("fraud.title")}
+            </p>
+            <ul className="divide-y divide-white/5 bg-white/5 text-sm">
+              {scan.flags.map((f) => {
+                const msgKey = f.message_key;
+                const sevLabel = t(
+                  f.severity === "critical"
+                    ? "fraud.severityCritical"
+                    : f.severity === "warning"
+                      ? "fraud.severityWarning"
+                      : "fraud.severityInfo",
+                );
+                return (
+                  <li
+                    key={f.check_id}
+                    className={`flex items-start gap-3 px-5 py-3 ${
+                      f.severity === "critical" ? "bg-red-500/10" : ""
+                    }`}
+                  >
+                    <span
+                      className={`mt-0.5 shrink-0 rounded px-2 py-0.5 text-[10px] font-bold ${
+                        f.severity === "critical"
+                          ? "bg-red-500/30 text-red-200"
+                          : f.severity === "warning"
+                            ? "bg-amber-500/30 text-amber-200"
+                            : "bg-sky-500/30 text-sky-200"
+                      }`}
+                    >
+                      {sevLabel}
+                    </span>
+                    <span>{t(msgKey) === msgKey ? msgKey.split(".").pop() : t(msgKey)}</span>
+                  </li>
+                );
+              })}
+            </ul>
           </section>
         )}
 
