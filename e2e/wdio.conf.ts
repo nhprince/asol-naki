@@ -9,7 +9,7 @@
  * at the binary before running this suite.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const config: Record<string, any> = {
+export const config: Record<string, any> = {
   runner: "local",
   specs: ["./specs/**/*.spec.ts"],
   maxInstances: 1, // one app window at a time
@@ -32,5 +32,3 @@ const config: Record<string, any> = {
   outputDir: "./logs",
   logLevel: "info",
 };
-
-export default config;
