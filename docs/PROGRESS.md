@@ -9,6 +9,7 @@ ROADMAP checkboxes get ticked only when CI is green AND ground-truth verified.
 
 | Date (UTC) | Commit | Change | Verification |
 |---|---|---|---|
+| 2026-08-24 | 7cfc83f | **P3 UI:** ReportCard — copy-to-clipboard share summary (clipboard API + execCommand fallback) | CI 32689017941 ✅ · local tsc/vitest ✅ |
 | 2026-08-24 | ccd487f | **FIX:** CI was red on Ubuntu job since smartctl bundling — tauri resources glob `resources/smartctl/*` matched nothing on Linux. Added README placeholder; Windows builds unaffected | CI 32688664344 ✅ (both jobs) |
 | 2026-08-23 | e912c7f | feat(report): ScanReport model + shareable summary text (Phase 3 groundwork); 4 tests; capacity GiB-floor to match Explorer | local tsc/vitest/build ✅ · E2E 32662622834 ✅ (CI had unrelated Linux glob failure, see above) |
 | 2026-08-23 | eeebd03 | docs: Phase 2 exit gate proven on Windows (5/5 E2E) | E2E 32666949583 ✅ (nightly) |
