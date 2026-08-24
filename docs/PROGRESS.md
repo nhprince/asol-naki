@@ -9,6 +9,7 @@ ROADMAP checkboxes get ticked only when CI is green AND ground-truth verified.
 
 | Date (UTC) | Commit | Change | Verification |
 |---|---|---|---|
+| 2026-08-24 | 3e64461 | **DEEP SCAN fixes:** (1) score-cap now mirrors Rust exactly — round after cap, single setState; (2) dead template `App.css` removed; (3) `icon-master.png` moved out of repo root → docs/design/; (4) README phase-status table synced with reality; i18n EN↔BN parity + Rust→i18n message_key contract verified programmatically | CI 32690609136 ✅ · local tsc/vitest(8)/build ✅ |
 | 2026-08-24 | c9a6206 | **P3 PDF:** Save-as-PDF via WebView2 print pipeline (zero new deps) + print stylesheet (paper-friendly report layout) | CI 32689390378 ✅ · local tsc/build ✅ |
 | 2026-08-24 | 7cfc83f | **P3 UI:** ReportCard — copy-to-clipboard share summary (clipboard API + execCommand fallback) | CI 32689017941 ✅ · local tsc/vitest ✅ |
 | 2026-08-24 | ccd487f | **FIX:** CI was red on Ubuntu job since smartctl bundling — tauri resources glob `resources/smartctl/*` matched nothing on Linux. Added README placeholder; Windows builds unaffected | CI 32688664344 ✅ (both jobs) |
