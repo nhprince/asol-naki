@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "@fontsource/noto-sans-bengali/400.css";
 @import "@fontsource/noto-sans-bengali/600.css";
+@import "./print.css";
 
 @theme {
   --color-brand-50: #eef7f9;

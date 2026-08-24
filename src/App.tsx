@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageToggle } from "./components/LanguageToggle";
+import { PrintButton } from "./components/PrintButton";
 import { ReportCard } from "./components/ReportCard";
 import { useScan } from "./lib/useScan";
 import type { StorageInfo } from "./lib/types";
@@ -79,7 +80,7 @@ export function App() {
                 {t("score.cappedNote")}
               </p>
             )}
-            <div className="mt-4 flex justify-center">
+            <div className="mt-4 flex justify-center gap-2">
               <ReportCard
                 hardware={scan.hardware!}
                 battery={scan.battery}
@@ -88,6 +89,7 @@ export function App() {
                 verdict={scan.verdict}
                 flags={scan.flags}
               />
+              <PrintButton />
             </div>
           </section>
         )}

@@ -1,0 +1,36 @@
+/* Print stylesheet: when "Save as PDF" is clicked, only the report content
+   prints — dark app chrome is stripped for paper-friendly output. */
+
+@media print {
+  body.printing {
+    background: white !important;
+  }
+
+  body.printing * {
+    visibility: hidden;
+  }
+
+  /* Only the results sections (score card + data tables) are visible. */
+  body.printing section,
+  body.printing section * {
+    visibility: visible;
+    color: #0d1b3e !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  body.printing section {
+    border: 1px solid #ccc !important;
+    margin-bottom: 8px;
+    page-break-inside: avoid;
+  }
+
+  body.printing button,
+  body.printing header {
+    display: none !important;
+  }
+
+  @page {
+    margin: 12mm;
+  }
+}
