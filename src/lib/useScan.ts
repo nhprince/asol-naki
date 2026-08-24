@@ -123,16 +123,14 @@ export function useScan() {
       const weighted = present.reduce((acc, [s, w]) => acc + s * w, 0) / wSum;
 
       // plan.md §6: Critical flag caps the score at 3.0 no matter what.
+      // Mirrors src-tauri/src/scoring.rs::compute_score (round AFTER cap).
       const CRITICAL_CAP = 3.0;
-      let s = Math.round(weighted * 10) / 10;
-      let cappedByCritical = false;
-      if (hasCritical && s > CRITICAL_CAP) {
-        s = CRITICAL_CAP;
-        cappedByCritical = true;
-      }
-      score = s;
-      verdict = verdictForScore(s);
-      setState((prev) => ({ ...prev, cappedByCritical }));
+      const cappedByCritical = hasCritical && weighted > CRITICAL_CAP;
+      const finalScore = cappedByCritical
+        ? CRITICAL_CAP
+        : Math.min(10, Math.max(0, weighted));
+      score = Math.round(finalScore * 10) / 10;
+      verdict = verdictForScore(score);
     }
 
     setState((prev) => ({

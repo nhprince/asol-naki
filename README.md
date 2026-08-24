@@ -10,11 +10,11 @@ plain-language verdict: buy / negotiate / walk away.
 
 | Phase | Scope | Status |
 |---|---|---|
-| 0 | Scaffold + CI/CD + POC | **in progress** |
-| 1 | MVP diagnostics (personal use) | — |
-| 2 | Fraud detection + display/input checks | — |
-| 3 | Reporting & polish | — |
-| 4 | Distribution readiness | — |
+| 0 | Scaffold + CI/CD + POC | ✅ done (CI+E2E green; ProBook checklist pending) |
+| 1 | MVP diagnostics | 🟢 code complete — ground-truth pending |
+| 2 | Fraud detection | 🟢 engine + E2E spoof gate done — display/input screens pending |
+| 3 | Reporting & polish | 🟠 model/text/copy/PDF done — shareable image export remains |
+| 4 | Distribution readiness | ⚪ pipeline ready, not tagged |
 | 5 | Licensing / reseller / Android | future |
 
 ## Docs
