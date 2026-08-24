@@ -55,6 +55,11 @@
     "scanFailed": "Scan failed — {{message}}",
     "retry": "Try again"
   },
+  "report": {
+    "copy": "Copy report",
+    "copied": "Copied ✓",
+    "print": "Save as PDF"
+  },
   "footer": {
     "phaseNote": "Phase 1 preview — storage & battery need Windows; scoring calibrates over time."
   }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageToggle } from "./components/LanguageToggle";
+import { ReportCard } from "./components/ReportCard";
 import { useScan } from "./lib/useScan";
 import type { StorageInfo } from "./lib/types";
 
@@ -78,6 +79,16 @@ export function App() {
                 {t("score.cappedNote")}
               </p>
             )}
+            <div className="mt-4 flex justify-center">
+              <ReportCard
+                hardware={scan.hardware!}
+                battery={scan.battery}
+                storage={scan.storage}
+                score={scan.score}
+                verdict={scan.verdict}
+                flags={scan.flags}
+              />
+            </div>
           </section>
         )}
 
