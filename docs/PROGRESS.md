@@ -9,6 +9,7 @@ ROADMAP checkboxes get ticked only when CI is green AND ground-truth verified.
 
 | Date (UTC) | Commit | Change | Verification |
 |---|---|---|---|
+| 2026-08-26 | 137e900 | **P2 display.rs COMPLETE:** EDID registry reader (winreg, Windows-gated) + VESA parser (checksum/header validation, PnP vendor decode, product/serial, week/year, diagonal, preferred-timing → native res + refresh Hz). `scan_display` command; UI DisplayCard (vendor/resolution/refresh/diagonal/manufacture week-year) EN/BN; useScan 4th parallel section (silent-skip off Windows). Test-fixture journey: PnP slice-index bug → decode_pnp_value(); gaming fixture needed true CVT-RB math (64_612 units ≤ u16); fixture u32→u16 LE write fix. 7 display unit tests | CI 32955672413 ✅ **38 rust tests** · local tsc/vitest(8)/build ✅ |
 | 2026-08-24 | 3e64461 | **DEEP SCAN fixes:** (1) score-cap now mirrors Rust exactly — round after cap, single setState; (2) dead template `App.css` removed; (3) `icon-master.png` moved out of repo root → docs/design/; (4) README phase-status table synced with reality; i18n EN↔BN parity + Rust→i18n message_key contract verified programmatically | CI 32690609136 ✅ · local tsc/vitest(8)/build ✅ |
 | 2026-08-24 | c9a6206 | **P3 PDF:** Save-as-PDF via WebView2 print pipeline (zero new deps) + print stylesheet (paper-friendly report layout) | CI 32689390378 ✅ · local tsc/build ✅ |
 | 2026-08-24 | 7cfc83f | **P3 UI:** ReportCard — copy-to-clipboard share summary (clipboard API + execCommand fallback) | CI 32689017941 ✅ · local tsc/vitest ✅ |
