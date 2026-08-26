@@ -112,18 +112,29 @@ pub fn scan_battery() -> Result<BatteryInfo, String> {
 fn run_powercfg_battery_report() -> std::io::Result<String> {
     use std::process::Command;
 
-    let tmp = std::env::temp_dir().join("asol-naki-battery.html");
+    let tmp = std::env::temp_dir().join("asol-naki-battery.xml");
+    // Flag order matters on some Windows builds: /XML must precede the
+    // /output path, otherwise powercfg silently emits HTML instead.
     let status = Command::new("powercfg")
-        .args(["/batteryreport", "/output"])
+        .args(["/batteryreport", "/XML", "/output"])
         .arg(&tmp)
-        .arg("/XML")
         .status()?;
 
     if !status.success() {
         return Err(std::io::Error::other("powercfg /batteryreport failed"));
     }
 
-    std::fs::read_to_string(tmp)
+    let body = std::fs::read_to_string(&tmp)?;
+    // Defensive: if powercfg ignored /XML and emitted HTML anyway, tell the
+    // caller clearly instead of returning a parse-empty result.
+    if body.trim_start().starts_with("<!DOCTYPE html")
+        || body.contains("<html")
+    {
+        return Err(std::io::Error::other(
+            "powercfg produced HTML instead of XML report",
+        ));
+    }
+    Ok(body)
 }
 
 #[cfg(test)]

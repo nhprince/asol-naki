@@ -242,28 +242,33 @@ fn split_json_documents(text: &str) -> Vec<String> {
 }
 
 /// Run bundled smartctl across all drives. Windows only; binary location is
-/// resolved relative to the exe (resources/smartctl/smartctl.exe), with a
-/// PATH fallback for development machines that have it installed.
+/// resolved relative to the exe. Tauri v2 places bundled resources in
+/// `<exe_dir>/resources/...` when installed, but our artifact zips put
+/// smartctl.exe NEXT TO the exe too — check both, plus bare name for dev.
 #[cfg(windows)]
 fn run_smartctl_all() -> std::io::Result<String> {
     use std::process::Command;
 
     let exe_dir = std::env::current_exe()?;
-    let bundled = exe_dir
-        .parent()
-        .map(|p| p.join("resources/smartctl/smartctl.exe"))
-        .unwrap_or_else(|| std::path::PathBuf::from("smartctl.exe"));
+    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+    if let Some(p) = exe_dir.parent() {
+        candidates.push(p.join("resources/smartctl/smartctl.exe")); // installed layout
+        candidates.push(p.join("smartctl/smartctl.exe")); // artifact zip layout
+        candidates.push(p.join("smartctl.exe")); // flattened zip layout
+    }
+    candidates.push(std::path::PathBuf::from("smartctl")); // dev PATH fallback
 
-    let cmd = if bundled.exists() {
-        bundled
-    } else {
-        std::path::PathBuf::from("smartctl")
-    };
+    let cmd = candidates
+        .iter()
+        .find(|c| c.exists())
+        .cloned()
+        .unwrap_or_else(|| std::path::PathBuf::from("smartctl"));
 
-    let out = Command::new(cmd)
+    // smartctl needs admin rights to read drive SMART data. Detect the
+    // specific failure so the UI can show an actionable message.
+    let out = Command::new(&cmd)
         .arg("--scan")
         .arg("--json")
-        .arg("--all")
         .output()?;
 
     if !out.status.success() && out.stdout.is_empty() {
@@ -272,7 +277,30 @@ fn run_smartctl_all() -> std::io::Result<String> {
             String::from_utf8_lossy(&out.stderr)
         )));
     }
-    Ok(String::from_utf8_lossy(&out.stdout).to_string())
+
+    // --scan lists devices; now query each with --all for full data.
+    let devices: Vec<String> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+        .filter_map(|v| {
+            v.get("device")
+                .and_then(|d| d.get("name"))
+                .and_then(|n| n.as_str())
+                .map(String::from)
+        })
+        .collect();
+
+    let mut all_docs = String::new();
+    for dev in &devices {
+        let out = Command::new(&cmd)
+            .arg("--json")
+            .arg("--all")
+            .arg(dev)
+            .output()?;
+        all_docs.push_str(&String::from_utf8_lossy(&out.stdout));
+        all_docs.push('\n');
+    }
+    Ok(all_docs)
 }
 
 #[cfg(test)]
