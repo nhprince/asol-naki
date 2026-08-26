@@ -85,10 +85,7 @@ pub fn parse_edid(edid: &[u8]) -> DisplayInfo {
         edid_valid: false,
     };
 
-    let header_ok = edid.len() >= 128
-        && edid[0] == 0x00
-        && edid[1] == 0xFF
-        && edid[7] == 0x00;
+    let header_ok = edid.len() >= 128 && edid[0] == 0x00 && edid[1] == 0xFF && edid[7] == 0x00;
     if !header_ok || !checksum_valid(edid) {
         return info;
     }
@@ -96,9 +93,7 @@ pub fn parse_edid(edid: &[u8]) -> DisplayInfo {
 
     info.manufacturer = Some(decode_pnp_id(edid));
     info.product_code = Some(u16::from_le_bytes([edid[10], edid[11]]));
-    info.serial_number = Some(u32::from_le_bytes([
-        edid[12], edid[13], edid[14], edid[15],
-    ]));
+    info.serial_number = Some(u32::from_le_bytes([edid[12], edid[13], edid[14], edid[15]]));
     info.manufacture_week = Some(if edid[16] == 0xFF { 0 } else { edid[16] });
     info.manufacture_year = Some(1990 + edid[17] as u16);
 
@@ -113,8 +108,7 @@ pub fn parse_edid(edid: &[u8]) -> DisplayInfo {
     //   58    v_active low 8 bits      59  v_blank low 8 bits
     //   60    hi nibble: h_active high 4 | lo nibble: h_blank high 4
     //   61    hi nibble: v_active high 4 | lo nibble: v_blank high 4
-    let px_clock_hz =
-        u16::from_le_bytes([edid[54], edid[55]]) as f64 * 10_000.0;
+    let px_clock_hz = u16::from_le_bytes([edid[54], edid[55]]) as f64 * 10_000.0;
     let h_active = ((((edid[60] >> 4) as u16) << 8) | edid[56] as u16) as f64;
     let h_blank = ((((edid[60] & 0x0F) as u16) << 8) | edid[57] as u16) as f64;
     let v_active = ((((edid[61] >> 4) as u16) << 8) | edid[58] as u16) as f64;
@@ -144,8 +138,7 @@ fn read_edids_from_registry() -> Result<Vec<Vec<u8>>, String> {
 
     let mut edids = Vec::new();
     for vendor_key in display_root.enum_keys().flatten() {
-        let Ok(vendor_root) = display_root.open_subkey_with_flags(&vendor_key, KEY_READ)
-        else {
+        let Ok(vendor_root) = display_root.open_subkey_with_flags(&vendor_key, KEY_READ) else {
             continue;
         };
         for instance in vendor_root.enum_keys().flatten() {
@@ -203,19 +196,9 @@ mod tests {
     ) -> Vec<u8> {
         let mut e = vec![0u8; 128];
         e.copy_from_slice(&[
-            0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, // header
-            pnp.0, pnp.1, // vendor
-            0x34, 0x12, // product code 0x1234
-            0x78, 0x56, 0x34, 0x12, // serial 0x12345678
-            week, year_offset,
-            1, 4, // EDID 1.4
-            0x80, // digital input
-            w_cm, h_cm,
-            0x78, 0x00, // gamma/features filler
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // chromaticity filler
-            0, 0, 0, // established timings none
-            0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
-            0x01, 0x01, 0x01, 0x01, 0x01, 0x01, // standard timings none
+            0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, pnp.0, pnp.1, 0x34, 0x12, 0x78,
+            0x56, 0x34, 0x12, week, year_offset, 1, 4, 0x80, w_cm, h_cm, 0x78, 0x00, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
         ]);
         // DTD #1 at offset 54
         e[54] = (px_clock_10khz & 0xFF) as u8;
