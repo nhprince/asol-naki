@@ -224,8 +224,9 @@ mod tests {
         e[22] = f.h_cm;
         e[23] = 0x78;
         if let Some(t) = &f.timing {
-            e[54] = (t.px_clock_10khz & 0xFF) as u8;
-            e[55] = (t.px_clock_10khz >> 8) as u8;
+            let pc = u16::try_from(t.px_clock_10khz).expect("px clock must fit u16 EDID field");
+            e[54] = (pc & 0xFF) as u8;
+            e[55] = (pc >> 8) as u8;
             e[56] = (t.h_active & 0xFF) as u8;
             e[57] = (t.h_blank & 0xFF) as u8;
             e[58] = (t.v_active & 0xFF) as u8;
