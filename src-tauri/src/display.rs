@@ -195,11 +195,24 @@ mod tests {
         v_blank: u16,
     ) -> Vec<u8> {
         let mut e = vec![0u8; 128];
-        e.copy_from_slice(&[
-            0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, pnp.0, pnp.1, 0x34, 0x12, 0x78,
-            0x56, 0x34, 0x12, week, year_offset, 1, 4, 0x80, w_cm, h_cm, 0x78, 0x00, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        ]);
+        // Header magic + fixed fields (VESA base-block layout)
+        e[..8].copy_from_slice(&[0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00]);
+        e[8] = pnp.0;
+        e[9] = pnp.1;
+        e[10] = 0x34; // product code 0x1234
+        e[11] = 0x12;
+        e[12] = 0x78; // serial 0x12345678
+        e[13] = 0x56;
+        e[14] = 0x34;
+        e[15] = 0x12;
+        e[16] = week;
+        e[17] = year_offset;
+        e[18] = 1; // EDID version 1
+        e[19] = 4; // revision 4
+        e[20] = 0x80; // digital input
+        e[21] = w_cm;
+        e[22] = h_cm;
+        e[23] = 0x78; // gamma filler
         // DTD #1 at offset 54
         e[54] = (px_clock_10khz & 0xFF) as u8;
         e[55] = (px_clock_10khz >> 8) as u8;
