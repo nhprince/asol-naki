@@ -196,7 +196,7 @@ mod tests {
     }
 
     struct TimingFixture {
-        px_clock_10khz: u16,
+        px_clock_10khz: u32,
         h_active: u16,
         h_blank: u16,
         v_active: u16,
