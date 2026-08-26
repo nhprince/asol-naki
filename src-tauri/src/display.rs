@@ -311,8 +311,8 @@ mod tests {
 
     #[test]
     fn parses_high_refresh_gaming_panel() {
-        // Real 165 Hz panels use CVT reduced-blanking. Totals: 2640 x 1511
-        // → pixel clock = 165 × 2640 × 1511 ≈ 658.2 MHz (fits u16: 65_819).
+        // Real 165 Hz panels use CVT reduced-blanking. Totals: 2640 x 1484
+        // → pixel clock = 165 × 2640 × 1484 ≈ 646.1 MHz (64_612, fits u16).
         let e = make_edid(&EdidFixture {
             pnp: (0x22, 0x08),
             week: 5,
@@ -320,11 +320,11 @@ mod tests {
             w_cm: 60,
             h_cm: 34,
             timing: Some(TimingFixture {
-                px_clock_10khz: 65_819,
+                px_clock_10khz: 64_612,
                 h_active: 2560,
                 h_blank: 80,
                 v_active: 1440,
-                v_blank: 71,
+                v_blank: 44,
             }),
         });
         let d = parse_edid(&e);
