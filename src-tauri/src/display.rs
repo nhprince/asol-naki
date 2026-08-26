@@ -35,7 +35,11 @@ pub struct DisplayInfo {
 /// Each of three 5-bit fields maps 1→'A' … 26→'Z'.
 pub fn decode_pnp_id(bytes: &[u8]) -> String {
     let b = |i: usize| -> u16 { *bytes.get(i).unwrap_or(&0) as u16 };
-    let combined = (b(8) << 8) | b(9);
+    decode_pnp_value((b(8) << 8) | b(9))
+}
+
+/// Decode an already-packed 15-bit PnP value (three 5-bit fields).
+pub fn decode_pnp_value(combined: u16) -> String {
     let letter = |c: u16| -> char {
         // 0 is reserved; clamp so we never emit garbage outside A-Z.
         let idx = c.clamp(1, 26) as u8;
@@ -236,12 +240,18 @@ mod tests {
 
     #[test]
     fn pnp_id_decodes_known_vendors() {
+        // Test the pure value decoder with packed 15-bit PnP values.
         // "AAA" = 1,1,1 → (1<<10)|(1<<5)|1 = 0x0421
-        assert_eq!(decode_pnp_id(&[0x04, 0x21]), "AAA");
-        // "BOE" (BOE Display) = 2,15,5 → 0x09E5
-        assert_eq!(decode_pnp_id(&[0x09, 0xE5]), "BOE");
+        assert_eq!(decode_pnp_value((1 << 10) | (1 << 5) | 1), "AAA");
+        // "BOE" (BOE Display) = 2,15,5 → 0x09E5 — real EDID bytes [0x09,0xE5]
+        assert_eq!(decode_pnp_value(0x09E5), "BOE");
+        assert_eq!(decode_pnp_id(&[0x09, 0xE5, 0, 0, 0, 0, 0, 0, 0, 0]), "BOE");
         // "HPH" (HP) = 8,16,8 → (8<<10)|(16<<5)|8 = 0x2208
-        assert_eq!(decode_pnp_id(&[0x22, 0x08]), "HPH");
+        assert_eq!(decode_pnp_value(0x2208), "HPH");
+        // Out-of-range fields clamp instead of emitting garbage.
+        assert_eq!(decode_pnp_value(0x7FFF), "ZZZ");
+        // Reserved 0 field clamps to 'A'.
+        assert_eq!(decode_pnp_value(0x0000), "AAA");
     }
 
     #[test]
@@ -296,7 +306,8 @@ mod tests {
 
     #[test]
     fn parses_high_refresh_gaming_panel() {
-        // 2560x1440 @ ~165Hz-class pixel clock ~586 MHz, blanking 480/150
+        // 2560x1440: totals (3040 x 1590) at 165 Hz → pixel clock 797.54 MHz
+        // → 79_754 in 10 kHz units; blanking 480/150.
         let e = make_edid(&EdidFixture {
             pnp: (0x22, 0x08),
             week: 5,
@@ -304,7 +315,7 @@ mod tests {
             w_cm: 60,
             h_cm: 34,
             timing: Some(TimingFixture {
-                px_clock_10khz: 58_600,
+                px_clock_10khz: 79_754,
                 h_active: 2560,
                 h_blank: 480,
                 v_active: 1440,
@@ -315,7 +326,7 @@ mod tests {
         assert_eq!(d.horizontal_px, Some(2560));
         assert_eq!(d.vertical_px, Some(1440));
         let r = d.preferred_refresh_hz.unwrap();
-        assert!(r > 155.0 && r < 175.0, "expected ~165Hz, got {r}");
+        assert!(r > 160.0 && r < 170.0, "expected ~165Hz, got {r}");
         assert_eq!(d.manufacturer.as_deref(), Some("HPH"));
     }
 }
