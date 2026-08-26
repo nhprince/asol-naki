@@ -245,7 +245,11 @@ mod tests {
         assert_eq!(decode_pnp_value((1 << 10) | (1 << 5) | 1), "AAA");
         // "BOE" (BOE Display) = 2,15,5 → 0x09E5 — real EDID bytes [0x09,0xE5]
         assert_eq!(decode_pnp_value(0x09E5), "BOE");
-        assert_eq!(decode_pnp_id(&[0x09, 0xE5, 0, 0, 0, 0, 0, 0, 0, 0]), "BOE");
+        // Full-buffer path: vendor bytes live at EDID offsets 8-9, not 0-1.
+        let mut buf = [0u8; 128];
+        buf[8] = 0x09;
+        buf[9] = 0xE5;
+        assert_eq!(decode_pnp_id(&buf), "BOE");
         // "HPH" (HP) = 8,16,8 → (8<<10)|(16<<5)|8 = 0x2208
         assert_eq!(decode_pnp_value(0x2208), "HPH");
         // Out-of-range fields clamp instead of emitting garbage.
@@ -306,8 +310,8 @@ mod tests {
 
     #[test]
     fn parses_high_refresh_gaming_panel() {
-        // 2560x1440: totals (3040 x 1590) at 165 Hz → pixel clock 797.54 MHz
-        // → 79_754 in 10 kHz units; blanking 480/150.
+        // Real 165 Hz panels use CVT reduced-blanking. Totals: 2640 x 1511
+        // → pixel clock = 165 × 2640 × 1511 ≈ 658.2 MHz (fits u16: 65_819).
         let e = make_edid(&EdidFixture {
             pnp: (0x22, 0x08),
             week: 5,
@@ -315,18 +319,18 @@ mod tests {
             w_cm: 60,
             h_cm: 34,
             timing: Some(TimingFixture {
-                px_clock_10khz: 79_754,
+                px_clock_10khz: 65_819,
                 h_active: 2560,
-                h_blank: 480,
+                h_blank: 80,
                 v_active: 1440,
-                v_blank: 150,
+                v_blank: 71,
             }),
         });
         let d = parse_edid(&e);
         assert_eq!(d.horizontal_px, Some(2560));
         assert_eq!(d.vertical_px, Some(1440));
         let r = d.preferred_refresh_hz.unwrap();
-        assert!(r > 160.0 && r < 170.0, "expected ~165Hz, got {r}");
+        assert!(r > 158.0 && r < 172.0, "expected ~165Hz, got {r}");
         assert_eq!(d.manufacturer.as_deref(), Some("HPH"));
     }
 }
