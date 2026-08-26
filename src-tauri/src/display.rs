@@ -207,12 +207,12 @@ mod tests {
         e[15] = 0x12;
         e[16] = week;
         e[17] = year_offset;
-        e[18] = 1; // EDID version 1
-        e[19] = 4; // revision 4
-        e[20] = 0x80; // digital input
+        e[18] = 1;
+        e[19] = 4;
+        e[20] = 0x80;
         e[21] = w_cm;
         e[22] = h_cm;
-        e[23] = 0x78; // gamma filler
+        e[23] = 0x78;
         // DTD #1 at offset 54
         e[54] = (px_clock_10khz & 0xFF) as u8;
         e[55] = (px_clock_10khz >> 8) as u8;
