@@ -61,13 +61,25 @@ jobs:
 
       # Upload the built exe so Prince can ground-truth test it on real
       # hardware without any local Rust toolchain.
+      # Layout matters: storage.rs resolves smartctl at
+      #   <exe_dir>/smartctl/smartctl.exe  (this layout)
+      #   <exe_dir>/resources/smartctl/smartctl.exe (installed layout)
+      # upload-artifact strips the common prefix, so we stage a folder that
+      # keeps smartctl/ as a sibling directory of the exe inside the zip.
+      - name: Stage + upload debug exe artifact
+        shell: pwsh
+        run: |
+          $stage = "artifact-stage"
+          New-Item -ItemType Directory -Force -Path "$stage/smartctl" | Out-Null
+          Copy-Item "src-tauri/target/debug/asol-naki.exe" "$stage/"
+          Copy-Item "src-tauri/resources/smartctl/*" "$stage/smartctl/" -Exclude README.md
+          Get-ChildItem $stage -Recurse | Select-Object FullName
+
       - name: Upload debug exe artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-debug-build
-          path: |
-            src-tauri/target/debug/asol-naki.exe
-            src-tauri/resources/smartctl/**
+          path: artifact-stage/**
           if-no-files-found: error
           retention-days: 14
 

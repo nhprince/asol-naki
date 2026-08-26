@@ -279,7 +279,11 @@ fn run_smartctl_all() -> std::io::Result<String> {
     }
 
     // --scan lists devices; now query each with --all for full data.
-    let devices: Vec<String> = String::from_utf8_lossy(&out.stdout)
+    // NOTE: smartctl's exit code is NON-ZERO when a drive reports failing
+    // SMART attributes, so we keep per-device output even on "failure" and
+    // only error out when there's nothing usable at all.
+    let scan_text = String::from_utf8_lossy(&out.stdout).to_string();
+    let devices: Vec<String> = scan_text
         .lines()
         .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
         .filter_map(|v| {
@@ -290,6 +294,13 @@ fn run_smartctl_all() -> std::io::Result<String> {
         })
         .collect();
 
+    if devices.is_empty() {
+        return Err(std::io::Error::other(format!(
+            "smartctl found no drives (stderr: {})",
+            String::from_utf8_lossy(&out.stderr).trim()
+        )));
+    }
+
     let mut all_docs = String::new();
     for dev in &devices {
         let out = Command::new(&cmd)
@@ -297,8 +308,17 @@ fn run_smartctl_all() -> std::io::Result<String> {
             .arg("--all")
             .arg(dev)
             .output()?;
-        all_docs.push_str(&String::from_utf8_lossy(&out.stdout));
-        all_docs.push('\n');
+        let text = String::from_utf8_lossy(&out.stdout);
+        if text.contains("\"device\"") {
+            all_docs.push_str(&text);
+            all_docs.push('\n');
+        }
+    }
+    if all_docs.is_empty() {
+        // Most common cause: not running as administrator.
+        return Err(std::io::Error::other(
+            "smartctl could not read drive data — run the app as Administrator.",
+        ));
     }
     Ok(all_docs)
 }

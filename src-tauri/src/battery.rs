@@ -96,8 +96,8 @@ fn text_between<'a>(haystack: &'a str, open: &str, close: &str) -> Option<&'a st
 #[cfg(windows)]
 #[tauri::command]
 pub fn scan_battery() -> Result<BatteryInfo, String> {
-    let report = run_powercfg_battery_report().map_err(|e| e.to_string())?;
-    Ok(parse_battery_report_xml(&report))
+    let report = scan_battery_impl().map_err(|e| e.to_string())?;
+    Ok(report)
 }
 
 #[cfg(not(windows))]
@@ -106,35 +106,87 @@ pub fn scan_battery() -> Result<BatteryInfo, String> {
     Err("Battery scan requires Windows (powercfg).".into())
 }
 
-/// Generate + read the battery report in a temp dir. Windows-only shell-out;
-/// parsing lives in `parse_battery_report_xml` so tests never touch this.
+/// Read battery facts directly from the WMI ROOT\WMI namespace (Windows).
+///
+/// Why not `powercfg /batteryreport`? Ground-truth on the ProBook showed
+/// powercfg's XML flag is unreliable across Windows builds (emits HTML or a
+/// blank file), and its report layout changes between versions. WMI gives
+/// us the three numbers we need straight from the battery driver:
+///   - BatteryStaticData.DesignedCapacity        (mWh, design spec)
+///   - BatteryFullChargedCapacity.FullChargedCapacity (mWh, current full)
+///   - BatteryCycleCount.CycleCount               (cycles)
+/// Manufacturer/chemistry come from BatteryStaticData too.
 #[cfg(windows)]
-fn run_powercfg_battery_report() -> std::io::Result<String> {
-    use std::process::Command;
+fn scan_battery_impl() -> Result<BatteryInfo, String> {
+    use serde::Deserialize;
+    use wmi::COMLibrary;
 
-    let tmp = std::env::temp_dir().join("asol-naki-battery.xml");
-    // Flag order matters on some Windows builds: /XML must precede the
-    // /output path, otherwise powercfg silently emits HTML instead.
-    let status = Command::new("powercfg")
-        .args(["/batteryreport", "/XML", "/output"])
-        .arg(&tmp)
-        .status()?;
+    let com = COMLibrary::without_security()
+        .map_err(|e| format!("COM init failed: {e}"))?;
+    let conn = wmi::WMIConnection::with_namespace_path("ROOT\\WMI", com)
+        .map_err(|e| format!("WMI connection failed: {e}"))?;
 
-    if !status.success() {
-        return Err(std::io::Error::other("powercfg /batteryreport failed"));
+    #[derive(Deserialize)]
+    #[serde(rename_all = "PascalCase")]
+    struct BatteryStaticData {
+        designed_capacity: Option<u32>,
+        manufacturer: Option<String>,
+        chemistry: Option<String>,
+        serial_number: Option<String>,
     }
 
-    let body = std::fs::read_to_string(&tmp)?;
-    // Defensive: if powercfg ignored /XML and emitted HTML anyway, tell the
-    // caller clearly instead of returning a parse-empty result.
-    if body.trim_start().starts_with("<!DOCTYPE html")
-        || body.contains("<html")
-    {
-        return Err(std::io::Error::other(
-            "powercfg produced HTML instead of XML report",
-        ));
+    #[derive(Deserialize)]
+    #[serde(rename_all = "PascalCase")]
+    struct BatteryFullChargedCapacity {
+        full_charged_capacity: Option<u32>,
     }
-    Ok(body)
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "PascalCase")]
+    struct BatteryCycleCount {
+        cycle_count: Option<u32>,
+    }
+
+    // These classes return per-battery instances; laptops have one but we
+    // take the first non-empty value defensively.
+    let statics: Vec<BatteryStaticData> = conn
+        .raw_query("SELECT DesignedCapacity, Manufacturer, Chemistry, SerialNumber FROM BatteryStaticData")
+        .map_err(|e| format!("BatteryStaticData query failed: {e}"))?;
+
+    let fulls: Vec<BatteryFullChargedCapacity> = conn
+        .raw_query("SELECT FullChargedCapacity FROM BatteryFullChargedCapacity")
+        .map_err(|e| format!("BatteryFullChargedCapacity query failed: {e}"))?;
+
+    let cycles: Vec<BatteryCycleCount> = conn
+        .raw_query("SELECT CycleCount FROM BatteryCycleCount")
+        .map_err(|e| format!("BatteryCycleCount query failed: {e}"))?;
+
+    let stat = statics.into_iter().find(|s| s.designed_capacity.unwrap_or(0) > 0);
+    let Some(stat) = stat else {
+        return Err(
+            "No battery data in WMI (desktop PC or battery driver missing).".into(),
+        );
+    };
+
+    let full = fulls
+        .into_iter()
+        .find(|f| f.full_charged_capacity.unwrap_or(0) > 0)
+        .and_then(|f| f.full_charged_capacity);
+
+    let design = stat.designed_capacity;
+    let health_percent = match (full, design) {
+        (Some(f), Some(d)) if d > 0 => Some((f as f64 / d as f64) * 100.0),
+        _ => None,
+    };
+
+    Ok(BatteryInfo {
+        design_capacity_mwh: design.map(|v| v as u64),
+        full_charge_capacity_mwh: full.map(|v| v as u64),
+        health_percent,
+        cycle_count: cycles.into_iter().find_map(|c| c.cycle_count),
+        manufacturer: stat.manufacturer.filter(|m| !m.trim().is_empty()),
+        chemistry: stat.chemistry.filter(|c| !c.trim().is_empty()),
+    })
 }
 
 #[cfg(test)]
