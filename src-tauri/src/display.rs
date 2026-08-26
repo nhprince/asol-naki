@@ -181,48 +181,54 @@ pub fn scan_display() -> Result<Vec<DisplayInfo>, String> {
 mod tests {
     use super::*;
 
-    /// Build a syntactically-valid 128-byte EDID from field values.
-    fn make_edid(
+    /// Parameters for building a synthetic EDID base block in tests.
+    struct EdidFixture {
         pnp: (u8, u8),
         week: u8,
         year_offset: u8,
         w_cm: u8,
         h_cm: u8,
+        timing: Option<TimingFixture>,
+    }
+
+    struct TimingFixture {
         px_clock_10khz: u16,
         h_active: u16,
         h_blank: u16,
         v_active: u16,
         v_blank: u16,
-    ) -> Vec<u8> {
+    }
+
+    fn make_edid(f: &EdidFixture) -> Vec<u8> {
         let mut e = vec![0u8; 128];
         // Header magic + fixed fields (VESA base-block layout)
         e[..8].copy_from_slice(&[0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00]);
-        e[8] = pnp.0;
-        e[9] = pnp.1;
-        e[10] = 0x34; // product code 0x1234
+        e[8] = f.pnp.0;
+        e[9] = f.pnp.1;
+        e[10] = 0x34;
         e[11] = 0x12;
-        e[12] = 0x78; // serial 0x12345678
+        e[12] = 0x78;
         e[13] = 0x56;
         e[14] = 0x34;
         e[15] = 0x12;
-        e[16] = week;
-        e[17] = year_offset;
+        e[16] = f.week;
+        e[17] = f.year_offset;
         e[18] = 1;
         e[19] = 4;
         e[20] = 0x80;
-        e[21] = w_cm;
-        e[22] = h_cm;
+        e[21] = f.w_cm;
+        e[22] = f.h_cm;
         e[23] = 0x78;
-        // DTD #1 at offset 54
-        e[54] = (px_clock_10khz & 0xFF) as u8;
-        e[55] = (px_clock_10khz >> 8) as u8;
-        e[56] = (h_active & 0xFF) as u8;
-        e[57] = (h_blank & 0xFF) as u8;
-        e[58] = (v_active & 0xFF) as u8;
-        e[59] = (v_blank & 0xFF) as u8;
-        e[60] = ((h_active >> 8) as u8) << 4 | ((h_blank >> 8) as u8);
-        e[61] = ((v_active >> 8) as u8) << 4 | ((v_blank >> 8) as u8);
-        // checksum over first 127 bytes
+        if let Some(t) = &f.timing {
+            e[54] = (t.px_clock_10khz & 0xFF) as u8;
+            e[55] = (t.px_clock_10khz >> 8) as u8;
+            e[56] = (t.h_active & 0xFF) as u8;
+            e[57] = (t.h_blank & 0xFF) as u8;
+            e[58] = (t.v_active & 0xFF) as u8;
+            e[59] = (t.v_blank & 0xFF) as u8;
+            e[60] = ((t.h_active >> 8) as u8) << 4 | ((t.h_blank >> 8) as u8);
+            e[61] = ((t.v_active >> 8) as u8) << 4 | ((t.v_blank >> 8) as u8);
+        }
         let sum: u32 = e[..127].iter().map(|&b| b as u32).sum();
         e[127] = ((256 - (sum % 256)) % 256) as u8;
         e
@@ -258,8 +264,21 @@ mod tests {
 
     #[test]
     fn parses_realistic_fhd_panel() {
-        // 1920x1080 @ ~57.5Hz-equivalent pixel clock 140 MHz, blanking 160/90
-        let e = make_edid((0x09, 0xE5), 12, 34, 30, 18, 14_000, 1920, 160, 1080, 90);
+        // 1920x1080, pixel clock 140 MHz, blanking 160/90
+        let e = make_edid(&EdidFixture {
+            pnp: (0x09, 0xE5),
+            week: 12,
+            year_offset: 34,
+            w_cm: 30,
+            h_cm: 18,
+            timing: Some(TimingFixture {
+                px_clock_10khz: 14_000,
+                h_active: 1920,
+                h_blank: 160,
+                v_active: 1080,
+                v_blank: 90,
+            }),
+        });
         let d = parse_edid(&e);
         assert!(d.edid_valid);
         assert_eq!(d.manufacturer.as_deref(), Some("BOE"));
@@ -277,8 +296,21 @@ mod tests {
 
     #[test]
     fn parses_high_refresh_gaming_panel() {
-        // 2560x1440 @ 165Hz-class pixel clock ~586 MHz, blanking 480/150
-        let e = make_edid((0x22, 0x08), 5, 31, 60, 34, 58_600, 2560, 480, 1440, 150);
+        // 2560x1440 @ ~165Hz-class pixel clock ~586 MHz, blanking 480/150
+        let e = make_edid(&EdidFixture {
+            pnp: (0x22, 0x08),
+            week: 5,
+            year_offset: 31,
+            w_cm: 60,
+            h_cm: 34,
+            timing: Some(TimingFixture {
+                px_clock_10khz: 58_600,
+                h_active: 2560,
+                h_blank: 480,
+                v_active: 1440,
+                v_blank: 150,
+            }),
+        });
         let d = parse_edid(&e);
         assert_eq!(d.horizontal_px, Some(2560));
         assert_eq!(d.vertical_px, Some(1440));
