@@ -1,6 +1,7 @@
 //! Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
 pub mod battery;
+pub mod display;
 pub mod hardware;
 pub mod integrity;
 pub mod models_db;
@@ -21,6 +22,7 @@ pub fn run() {
             hardware::scan_hardware_full,
             battery::scan_battery,
             storage::scan_storage,
+            display::scan_display,
             integrity::run_integrity_checks,
         ])
         .run(tauri::generate_context!())

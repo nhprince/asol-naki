@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import { verdictForScore, type Verdict } from "./format";
 import type {
   BatteryInfo,
+  DisplayInfo,
   FullHardwareInfo,
   StorageInfo,
 } from "./types";
@@ -19,6 +20,7 @@ export interface ScanState {
   hardware: FullHardwareInfo | null;
   battery: BatteryInfo | null;
   storage: StorageInfo[] | null;
+  display: DisplayInfo[] | null;
   score: number | null;
   verdict: Verdict | null;
   cappedByCritical: boolean;
@@ -26,7 +28,12 @@ export interface ScanState {
 }
 
 interface SectionError {
-  section: "hardware" | "battery" | "storage" | "integrity";
+  section:
+    | "hardware"
+    | "battery"
+    | "storage"
+    | "display"
+    | "integrity";
   message: string;
 }
 
@@ -40,6 +47,7 @@ export function useScan() {
     hardware: null,
     battery: null,
     storage: null,
+    display: null,
     score: null,
     verdict: null,
     cappedByCritical: false,
@@ -52,15 +60,17 @@ export function useScan() {
     setErrors([]);
     const errs: SectionError[] = [];
 
-    const [hw, bat, stor] = await Promise.allSettled([
+    const [hw, bat, stor, disp] = await Promise.allSettled([
       invoke<FullHardwareInfo>("scan_hardware_full"),
       invoke<BatteryInfo>("scan_battery"),
       invoke<StorageInfo[]>("scan_storage"),
+      invoke<DisplayInfo[]>("scan_display"),
     ]);
 
     let hardware: FullHardwareInfo | null = null;
     let battery: BatteryInfo | null = null;
     let storage: StorageInfo[] | null = null;
+    let display: DisplayInfo[] | null = null;
 
     if (hw.status === "fulfilled") {
       hardware = hw.value;
@@ -76,6 +86,11 @@ export function useScan() {
       storage = stor.value;
     } else if (!String(stor.reason).includes("requires Windows")) {
       errs.push({ section: "storage", message: String(stor.reason) });
+    }
+    if (disp.status === "fulfilled") {
+      display = disp.value;
+    } else if (!String(disp.reason).includes("requires Windows")) {
+      errs.push({ section: "display", message: String(disp.reason) });
     }
 
     // Fraud checks run whenever we have hardware data; integrity failures
@@ -139,6 +154,7 @@ export function useScan() {
       hardware,
       battery,
       storage,
+      display,
       score,
       verdict,
       flags,

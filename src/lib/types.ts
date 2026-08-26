@@ -45,4 +45,17 @@ export interface StorageInfo {
   temperature_c?: number;
 }
 
+export interface DisplayInfo {
+  manufacturer?: string;
+  product_code?: number;
+  serial_number?: number;
+  manufacture_week?: number;
+  manufacture_year?: number;
+  horizontal_px?: number;
+  vertical_px?: number;
+  preferred_refresh_hz?: number;
+  diagonal_cm?: number;
+  edid_valid: boolean;
+}
+
 export type Verdict = "walk-away" | "negotiate" | "good-buy";

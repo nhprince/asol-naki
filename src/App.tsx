@@ -4,7 +4,10 @@ import { LanguageToggle } from "./components/LanguageToggle";
 import { PrintButton } from "./components/PrintButton";
 import { ReportCard } from "./components/ReportCard";
 import { useScan } from "./lib/useScan";
-import type { StorageInfo } from "./lib/types";
+import type {
+  DisplayInfo,
+  StorageInfo,
+} from "./lib/types";
 
 function formatMemory(mb: number, locale: string): string {
   return new Intl.NumberFormat(locale === "bn" ? "bn-BD" : "en-US", {
@@ -231,6 +234,12 @@ export function App() {
           <StorageCard key={`${d.model_name ?? "disk"}-${i}`} d={d} />
         ))}
 
+        {scan.display
+          ?.filter((d) => d.edid_valid)
+          .map((d, i) => (
+            <DisplayCard key={`display-${i}`} d={d} />
+          ))}
+
         <p className="text-center text-xs text-white/40">
           {t("footer.phaseNote")}
         </p>
@@ -259,6 +268,44 @@ function StorageCard({ d }: { d: StorageInfo }) {
       )}
       {d.power_on_hours != null && (
         <Row label={t("scan.storageHours")} value={String(d.power_on_hours)} />
+      )}
+    </Section>
+  );
+}
+
+function DisplayCard({ d }: { d: DisplayInfo }) {
+  const { t } = useTranslation();
+  const resolution =
+    d.horizontal_px && d.vertical_px
+      ? `${d.horizontal_px} × ${d.vertical_px}`
+      : undefined;
+  return (
+    <Section title={t("scan.displayTitle")}>
+      {d.manufacturer && <Row label={t("scan.displayVendor")} value={d.manufacturer} />}
+      {resolution && (
+        <Row label={t("scan.displayResolution")} value={resolution} />
+      )}
+      {d.preferred_refresh_hz != null && (
+        <Row
+          label={t("scan.displayRefresh")}
+          value={`${Math.round(d.preferred_refresh_hz)} Hz`}
+        />
+      )}
+      {d.diagonal_cm != null && (
+        <Row
+          label={t("scan.displaySize")}
+          value={`≈ ${Math.round(d.diagonal_cm / 2.54)}″`}
+        />
+      )}
+      {d.manufacture_year != null && (
+        <Row
+          label={t("scan.displayMade")}
+          value={
+            d.manufacture_week && d.manufacture_week > 0
+              ? `W${d.manufacture_week} ${d.manufacture_year}`
+              : String(d.manufacture_year)
+          }
+        />
       )}
     </Section>
   );

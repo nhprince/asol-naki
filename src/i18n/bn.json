@@ -31,7 +31,13 @@
     "storageCapacity": "ক্যাপাসিটি",
     "storageStatus": "SMART অবস্থা",
     "storageUsedPct": "ব্যবহৃত জীবনকাল",
-    "storageHours": "চালু ঘণ্টা"
+    "storageHours": "চালু ঘণ্টা",
+    "displayTitle": "ডিসপ্লে (EDID)",
+    "displayVendor": "প্যানেল ভেন্ডর",
+    "displayResolution": "নেটিভ রেজোলিউশন",
+    "displayRefresh": "রিফ্রেশ রেট",
+    "displaySize": "স্ক্রিন সাইজ",
+    "displayMade": "উৎপাদন"
   },
   "score": {
     "title": "বিশ্বাসযোগ্যতা স্কোর",
