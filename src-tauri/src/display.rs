@@ -151,9 +151,10 @@ fn read_edids_from_registry() -> Result<Vec<Vec<u8>>, String> {
             else {
                 continue;
             };
-            if let Ok(edid) = params.get_value::<Vec<u8>, _>("EDID") {
-                if !edid.is_empty() {
-                    edids.push(edid);
+            if let Ok(raw) = params.get_raw_value("EDID") {
+                // REG_BINARY → raw bytes; other types (e.g. REG_SZ) are not EDIDs.
+                if raw.vtype == winreg::enums::RegType::REG_BINARY && !raw.bytes.is_empty() {
+                    edids.push(raw.bytes);
                 }
             }
         }
