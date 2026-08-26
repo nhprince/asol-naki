@@ -79,7 +79,11 @@ export function useScan() {
     }
     if (bat.status === "fulfilled") {
       battery = bat.value;
-    } else if (!String(bat.reason).includes("requires Windows")) {
+    } else if (
+      !String(bat.reason).includes("requires Windows") &&
+      !String(bat.reason).includes("No battery present")
+    ) {
+      // "No battery present" is a normal desktop outcome — not an error.
       errs.push({ section: "battery", message: String(bat.reason) });
     }
     if (stor.status === "fulfilled") {

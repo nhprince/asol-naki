@@ -163,9 +163,8 @@ fn scan_battery_impl() -> Result<BatteryInfo, String> {
 
     let stat = statics.into_iter().find(|s| s.designed_capacity.unwrap_or(0) > 0);
     let Some(stat) = stat else {
-        return Err(
-            "No battery data in WMI (desktop PC or battery driver missing).".into(),
-        );
+        // Desktops / docks without a battery are normal, not an error.
+        return Err("No battery present (desktop or missing driver).".into());
     };
 
     let full = fulls

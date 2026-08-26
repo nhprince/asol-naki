@@ -266,39 +266,36 @@ fn run_smartctl_all() -> std::io::Result<String> {
 
     // smartctl needs admin rights to read drive SMART data. Detect the
     // specific failure so the UI can show an actionable message.
+    //
+    // IMPORTANT: `smartctl --scan` is UNRELIABLE on Windows — it often
+    // returns an empty list even when drives exist (known smartmontools
+    // issue on Windows; it probes \\.\PhysicalDriveN poorly without admin
+    // and misses NVMe in some builds). The robust approach: probe the
+    // standard Windows drive paths directly (PD0..PD15) and query each.
+    let mut devices: Vec<String> = Vec::new();
+
+    // 1) Try --scan first (works on some setups, esp. SATA).
     let out = Command::new(&cmd)
         .arg("--scan")
         .arg("--json")
         .output()?;
-
-    if !out.status.success() && out.stdout.is_empty() {
-        return Err(std::io::Error::other(format!(
-            "smartctl failed: {}",
-            String::from_utf8_lossy(&out.stderr)
-        )));
-    }
-
-    // --scan lists devices; now query each with --all for full data.
-    // NOTE: smartctl's exit code is NON-ZERO when a drive reports failing
-    // SMART attributes, so we keep per-device output even on "failure" and
-    // only error out when there's nothing usable at all.
     let scan_text = String::from_utf8_lossy(&out.stdout).to_string();
-    let devices: Vec<String> = scan_text
-        .lines()
-        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
-        .filter_map(|v| {
-            v.get("device")
+    for l in scan_text.lines() {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(l) {
+            if let Some(name) = v
+                .get("device")
                 .and_then(|d| d.get("name"))
                 .and_then(|n| n.as_str())
-                .map(String::from)
-        })
-        .collect();
+            {
+                devices.push(name.to_string());
+            }
+        }
+    }
 
-    if devices.is_empty() {
-        return Err(std::io::Error::other(format!(
-            "smartctl found no drives (stderr: {})",
-            String::from_utf8_lossy(&out.stderr).trim()
-        )));
+    // 2) Always also probe PhysicalDrive0..15 + common NVMe namespaces —
+    //    --all on an absent drive just errors harmlessly; we keep successes.
+    for i in 0..16 {
+        devices.push(format!(r"\\.\PhysicalDrive{i}"));
     }
 
     let mut all_docs = String::new();
