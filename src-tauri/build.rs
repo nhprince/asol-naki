@@ -1,20 +1,12 @@
 fn main() {
-    tauri_build::build();
-
-    // Windows: request Administrator elevation at the manifest level.
-    //
-    // Why: smartctl (and the future WMI SYSTEM queries) CANNOT read drive
-    // SMART data as a normal user — \\.\PhysicalDriveN requires the
-    // elevated token. Ground truth (ProBook round 4): right-click →
-    // "Run as administrator" did NOT show a UAC prompt and the app still
-    // failed, because the default manifest declares requestedExecutionLevel
-    // = asInvoker, so Windows never elevates regardless of shell choice.
-    //
-    // With `requireAdministrator`, Windows MUST show the UAC consent dialog
-    // on every launch — the behavior every user expects from a diagnostic
-    // tool like CrystalDiskInfo / HWiNFO.
-    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
-        let manifest = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    // Windows: request Administrator elevation via Tauri's OFFICIAL
+    // manifest override (WindowsAttributes::app_manifest), NOT manual
+    // cargo link flags — we tried /MANIFEST:EMBED in build.rs and it hit
+    // LNK1327 "execution level doesn't match manifest snippets" because
+    // Tauri/tao ALSO embed a default manifest. This is the sanctioned path
+    // (tauri-build docs: example shows exactly requireAdministrator).
+    let windows = tauri_build::WindowsAttributes::new().app_manifest(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
     <security>
@@ -23,19 +15,8 @@ fn main() {
       </requestedPrivileges>
     </security>
   </trustInfo>
-</assembly>"#;
-
-        let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR unset");
-        let manifest_path = std::path::Path::new(&out_dir).join("app.manifest");
-        std::fs::write(&manifest_path, manifest).expect("write manifest");
-
-        println!("cargo:rustc-link-arg-bins=/MANIFEST:EMBED");
-        println!(
-            "cargo:rustc-link-arg-bins=/MANIFESTINPUT:{}",
-            manifest_path.display()
-        );
-    }
-
-    // Rerun when the build config or env changes so the manifest stays in sync.
-    println!("cargo:rerun-if-changed=build.rs");
+</assembly>"#,
+    );
+    let attrs = tauri_build::Attributes::new().windows_attributes(windows);
+    tauri_build::try_build(attrs).expect("failed to run tauri build script");
 }
