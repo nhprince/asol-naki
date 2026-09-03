@@ -13,7 +13,7 @@ fn main() {
     // With `requireAdministrator`, Windows MUST show the UAC consent dialog
     // on every launch — the behavior every user expects from a diagnostic
     // tool like CrystalDiskInfo / HWiNFO.
-    if std::env::var("CARGO_CFG_TARGET_OS").ok().as_deref() == Ok("windows") {
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
         let manifest = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
