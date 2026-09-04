@@ -241,10 +241,23 @@ fn split_json_documents(text: &str) -> Vec<String> {
     docs
 }
 
-/// Run bundled smartctl across all drives. Windows only; binary location is
-/// resolved relative to the exe. Tauri v2 places bundled resources in
-/// `<exe_dir>/resources/...` when installed, but our artifact zips put
-/// smartctl.exe NEXT TO the exe too — check both, plus bare name for dev.
+/// Run bundled smartctl across all drives. Windows only.
+///
+/// Strategy:
+///   1. UNELEVATED attempt first (no UAC prompt) — if smartctl can open the
+///      drives as a normal user (rare but possible on some systems/configs),
+///      we take the friction-free path.
+///   2. ELEVATED retry via ShellExecuteW(runas) — one UAC prompt for the
+///      whole scan because all drives are chained in a single cmd line.
+///      The cmd writes each drive's JSON to a temp file; we poll for the
+///      file and read it back. Standard pattern: ShellExecuteW doesn't
+///      return a process handle, so we can't `WaitForSingleObject` on it.
+///
+/// Failure modes surfaced to the UI:
+///   - "elevation-cancelled" → user clicked No on UAC → return empty list
+///     silently (the UI hides the Storage card entirely instead) — best UX
+///     for someone deliberately checking "non-admin-only" boxes at a shop.
+///   - any real error still bubbles up with the actionable message.
 #[cfg(windows)]
 fn run_smartctl_all() -> std::io::Result<String> {
     use std::process::Command;
@@ -252,29 +265,23 @@ fn run_smartctl_all() -> std::io::Result<String> {
     let exe_dir = std::env::current_exe()?;
     let mut candidates: Vec<std::path::PathBuf> = Vec::new();
     if let Some(p) = exe_dir.parent() {
-        candidates.push(p.join("resources/smartctl/smartctl.exe")); // installed layout
-        candidates.push(p.join("smartctl/smartctl.exe")); // artifact zip layout
-        candidates.push(p.join("smartctl.exe")); // flattened zip layout
+        candidates.push(p.join("resources/smartctl/smartctl.exe"));
+        candidates.push(p.join("smartctl/smartctl.exe"));
+        candidates.push(p.join("smartctl.exe"));
     }
-    candidates.push(std::path::PathBuf::from("smartctl")); // dev PATH fallback
+    candidates.push(std::path::PathBuf::from("smartctl"));
 
     let cmd = candidates
         .iter()
         .find(|c| c.exists())
         .cloned()
-        .unwrap_or_else(|| std::path::PathBuf::from("smartctl"));
+        .unwrap_or_else(|| std::path::PathBuf::from("smartctl"))
+        .canonicalize()
+        .unwrap_or_else(|_| std::path::PathBuf::from("smartctl"));
 
-    // smartctl needs admin rights to read drive SMART data. Detect the
-    // specific failure so the UI can show an actionable message.
-    //
-    // IMPORTANT: `smartctl --scan` is UNRELIABLE on Windows — it often
-    // returns an empty list even when drives exist (known smartmontools
-    // issue on Windows; it probes \\.\PhysicalDriveN poorly without admin
-    // and misses NVMe in some builds). The robust approach: probe the
-    // standard Windows drive paths directly (PD0..PD15) and query each.
+    // Drive list: --scan results + PhysicalDrive0..15 as a safety net
+    // (--scan is known-unreliable on Windows, esp. NVMe).
     let mut devices: Vec<String> = Vec::new();
-
-    // 1) Try --scan first (works on some setups, esp. SATA).
     let out = Command::new(&cmd).arg("--scan").arg("--json").output()?;
     let scan_text = String::from_utf8_lossy(&out.stdout).to_string();
     for l in scan_text.lines() {
@@ -288,14 +295,13 @@ fn run_smartctl_all() -> std::io::Result<String> {
             }
         }
     }
-
-    // 2) Always also probe PhysicalDrive0..15 + common NVMe namespaces —
-    //    --all on an absent drive just errors harmlessly; we keep successes.
     for i in 0..16 {
         devices.push(format!(r"\\.\PhysicalDrive{i}"));
     }
+    devices.dedup();
 
-    let mut all_docs = String::new();
+    // ── Pass 1: unelevated probe of every candidate ───────────────────
+    let mut docs = String::new();
     for dev in &devices {
         let out = Command::new(&cmd)
             .arg("--json")
@@ -304,17 +310,106 @@ fn run_smartctl_all() -> std::io::Result<String> {
             .output()?;
         let text = String::from_utf8_lossy(&out.stdout);
         if text.contains("\"device\"") {
-            all_docs.push_str(&text);
-            all_docs.push('\n');
+            docs.push_str(&text);
+            docs.push('\n');
         }
     }
-    if all_docs.is_empty() {
-        // Most common cause: not running as administrator.
-        return Err(std::io::Error::other(
-            "smartctl could not read drive data — run the app as Administrator.",
-        ));
+    if !docs.is_empty() {
+        return Ok(docs);
     }
-    Ok(all_docs)
+
+    // ── Pass 2: one-shot elevated cmd covering all drives ─────────────
+    let temp_dir = std::env::temp_dir();
+    let out_file = temp_dir.join("asol-naki-smartctl.json");
+    let _ = std::fs::remove_file(&out_file); // stale output confuses polling
+
+    // Chain per-drive invokes with , (semicolon) — never `&&` because a
+    // missing/absent drive returns nonzero and would short-circuit the rest.
+    // Each smartctl appends to the same file.
+    let drive_chain = devices
+        .iter()
+        .map(|d| format!(r#"""{}"" --json --all "{}""#, cmd.display(), d))
+        .collect::<Vec<_>>()
+        .join(" 2>nul , ");
+
+    let cmdline = format!(
+        r#"/c "{drive_chain}" 2>nul > "{}""#,
+        out_file.display()
+    );
+
+    match shell_execute_runas("cmd.exe", &cmdline) {
+        ShellRun::Ok => {
+            // Poll for the file (≈30 s ceiling), then read it.
+            for _ in 0..60 {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                if let Ok(m) = std::fs::metadata(&out_file) {
+                    if m.len() > 0 {
+                        std::thread::sleep(std::time::Duration::from_millis(400));
+                        break;
+                    }
+                }
+            }
+            let body = std::fs::read_to_string(&out_file)?;
+            Ok(body)
+        }
+        ShellRun::Cancelled => {
+            // User declined UAC — the UI handles this as "no storage data"
+            // rather than an error.
+            Ok(String::new())
+        }
+        ShellRun::Failed(msg) => Err(std::io::Error::other(msg)),
+    }
+}
+
+/// Outcome of a ShellExecuteW(verb=runas) call. Internal to storage.rs on
+/// Windows; the empty-string convention for `Cancelled` is what the UI uses
+/// to decide whether to hide the Storage card entirely.
+#[cfg(windows)]
+#[derive(Debug)]
+enum ShellRun {
+    Ok,
+    Cancelled,
+    Failed(String),
+}
+
+/// ShellExecuteW with verb="runas", hiding the window, against a file+params.
+/// Returns Ok on spawn success (NOT on command success — that's detected by
+/// reading the output file). Cancelled when the user declines the UAC prompt.
+/// <https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecutew>
+#[cfg(windows)]
+fn shell_execute_runas(file: &str, params: &str) -> ShellRun {
+    use std::os::windows::ffi::OsStrExt;
+
+    fn to_wide(s: &str) -> Vec<u16> {
+        std::ffi::OsStr::new(s)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
+    }
+
+    let verb_w = to_wide("runas");
+    let file_w = to_wide(file);
+    let params_w = to_wide(params);
+
+    let hinst = unsafe {
+        windows_sys::Win32::UI::Shell::ShellExecuteW(
+            std::ptr::null_mut(),          // HWND hwnd
+            verb_w.as_ptr(),               // LPCWSTR lpOperation = "runas"
+            file_w.as_ptr(),               // LPCWSTR lpFile = "cmd.exe"
+            params_w.as_ptr(),             // LPCWSTR lpParameters
+            std::ptr::null(),              // LPCWSTR lpDirectory = cwd
+            0,                             // INT nShowCmd = SW_HIDE
+        )
+    };
+
+    // Per docs: success returns >32, ≤32 is an error code.
+    // SE_ERR_ACCESSDENIED (5) = user declined the UAC consent dialog.
+    let code = hinst as usize;
+    match code {
+        n if n > 32 => ShellRun::Ok,
+        5 => ShellRun::Cancelled,
+        n => ShellRun::Failed(format!("ShellExecuteW failed ({n})")),
+    }
 }
 
 #[cfg(test)]
