@@ -393,7 +393,7 @@ fn shell_execute_runas(file: &str, params: &str) -> ShellRun {
 
     let hinst = unsafe {
         windows_sys::Win32::UI::Shell::ShellExecuteW(
-            std::ptr::null_mut(),          // HWND hwnd
+            0,                             // HWND hwnd (0 = none)
             verb_w.as_ptr(),               // LPCWSTR lpOperation = "runas"
             file_w.as_ptr(),               // LPCWSTR lpFile = "cmd.exe"
             params_w.as_ptr(),             // LPCWSTR lpParameters
