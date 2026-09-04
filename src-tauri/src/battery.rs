@@ -121,8 +121,7 @@ fn scan_battery_impl() -> Result<BatteryInfo, String> {
     use serde::Deserialize;
     use wmi::COMLibrary;
 
-    let com = COMLibrary::without_security()
-        .map_err(|e| format!("COM init failed: {e}"))?;
+    let com = COMLibrary::without_security().map_err(|e| format!("COM init failed: {e}"))?;
     let conn = wmi::WMIConnection::with_namespace_path("ROOT\\WMI", com)
         .map_err(|e| format!("WMI connection failed: {e}"))?;
 
@@ -150,7 +149,9 @@ fn scan_battery_impl() -> Result<BatteryInfo, String> {
     // These classes return per-battery instances; laptops have one but we
     // take the first non-empty value defensively.
     let statics: Vec<BatteryStaticData> = conn
-        .raw_query("SELECT DesignedCapacity, Manufacturer, Chemistry, SerialNumber FROM BatteryStaticData")
+        .raw_query(
+            "SELECT DesignedCapacity, Manufacturer, Chemistry, SerialNumber FROM BatteryStaticData",
+        )
         .map_err(|e| format!("BatteryStaticData query failed: {e}"))?;
 
     let fulls: Vec<BatteryFullChargedCapacity> = conn
@@ -161,7 +162,9 @@ fn scan_battery_impl() -> Result<BatteryInfo, String> {
         .raw_query("SELECT CycleCount FROM BatteryCycleCount")
         .map_err(|e| format!("BatteryCycleCount query failed: {e}"))?;
 
-    let stat = statics.into_iter().find(|s| s.designed_capacity.unwrap_or(0) > 0);
+    let stat = statics
+        .into_iter()
+        .find(|s| s.designed_capacity.unwrap_or(0) > 0);
     let Some(stat) = stat else {
         // Desktops / docks without a battery are normal, not an error.
         return Err("No battery present (desktop or missing driver).".into());

@@ -275,10 +275,7 @@ fn run_smartctl_all() -> std::io::Result<String> {
     let mut devices: Vec<String> = Vec::new();
 
     // 1) Try --scan first (works on some setups, esp. SATA).
-    let out = Command::new(&cmd)
-        .arg("--scan")
-        .arg("--json")
-        .output()?;
+    let out = Command::new(&cmd).arg("--scan").arg("--json").output()?;
     let scan_text = String::from_utf8_lossy(&out.stdout).to_string();
     for l in scan_text.lines() {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(l) {
