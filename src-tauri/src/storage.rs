@@ -1,4 +1,4 @@
-//! Storage diagnostics via bundled `smartctl` (smartmontools, GPL).
+//! Storage diagnostics via bundled `smartctl` (smartmontools, GPL) or WMI fallback.
 
 use serde::Serialize;
 
@@ -160,12 +160,21 @@ fn raw_value(attr: &serde_json::Value) -> Option<u64> {
 #[tauri::command]
 pub async fn scan_storage() -> Result<Vec<StorageInfo>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let json = run_smartctl_all().map_err(|e| e.to_string())?;
-        Ok(split_json_documents(&json)
-            .iter()
-            .filter(|doc| doc.contains("\"device\""))
-            .map(|d| parse_smartctl_json(d))
-            .collect())
+        // Try smartctl first
+        if let Ok(json) = run_smartctl_all() {
+            let parsed: Vec<StorageInfo> = split_json_documents(&json)
+                .iter()
+                .filter(|doc| doc.contains("\"device\""))
+                .map(|d| parse_smartctl_json(d))
+                .collect();
+
+            if !parsed.is_empty() {
+                return Ok(parsed);
+            }
+        }
+
+        // Fall back to Windows WMI Win32_DiskDrive
+        scan_storage_wmi_fallback()
     })
     .await
     .map_err(|e| format!("Task join failed: {e}"))?
@@ -174,7 +183,55 @@ pub async fn scan_storage() -> Result<Vec<StorageInfo>, String> {
 #[cfg(not(windows))]
 #[tauri::command]
 pub async fn scan_storage() -> Result<Vec<StorageInfo>, String> {
-    Err("Storage scan requires Windows + bundled smartctl.".into())
+    Err("Storage scan requires Windows + bundled smartctl or WMI.".into())
+}
+
+#[cfg(windows)]
+fn scan_storage_wmi_fallback() -> Result<Vec<StorageInfo>, String> {
+    use serde::Deserialize;
+    use wmi::COMLibrary;
+
+    let com = match COMLibrary::without_security() {
+        Ok(c) => c,
+        Err(_) => unsafe { COMLibrary::assume_initialized() },
+    };
+
+    let conn = wmi::WMIConnection::new(com)
+        .map_err(|e| format!("WMI connection failed: {e}"))?;
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "PascalCase")]
+    struct Win32DiskDrive {
+        model: Option<String>,
+        serial_number: Option<String>,
+        size: Option<u64>,
+        status: Option<String>,
+        interface_type: Option<String>,
+    }
+
+    let drives: Vec<Win32DiskDrive> = conn
+        .raw_query("SELECT Model, SerialNumber, Size, Status, InterfaceType FROM Win32_DiskDrive")
+        .map_err(|e| format!("Win32_DiskDrive query failed: {e}"))?;
+
+    let list = drives
+        .into_iter()
+        .map(|d| StorageInfo {
+            model_name: d.model.filter(|s| !s.trim().is_empty()),
+            serial: d.serial_number.filter(|s| !s.trim().is_empty()),
+            protocol: d.interface_type.map(|s| s.to_lowercase()),
+            total_capacity_bytes: d.size,
+            sector_size: Some(512),
+            smart_status: d.status.map(|s| s.to_lowercase()),
+            nvme_percentage_used: None,
+            realloc_sector_count: None,
+            pending_sector_count: None,
+            media_errors: None,
+            power_on_hours: None,
+            temperature_c: None,
+        })
+        .collect();
+
+    Ok(list)
 }
 
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -232,11 +289,16 @@ fn run_smartctl_all() -> std::io::Result<String> {
         }
     }
 
+    // System choco / smartmontools installation paths
+    candidates.push(std::path::PathBuf::from(r"C:\Program Files\smartmontools\bin\smartctl.exe"));
+    candidates.push(std::path::PathBuf::from(r"C:\ProgramData\chocolatey\bin\smartctl.exe"));
+    candidates.push(std::path::PathBuf::from("smartctl.exe"));
+
     let cmd_opt = candidates.iter().find(|c| c.exists()).cloned();
     let Some(cmd) = cmd_opt else {
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            "smartctl component missing from app bundle. Please ensure smartctl.exe is present.",
+            "smartctl component missing from app bundle.",
         ));
     };
 
@@ -289,7 +351,7 @@ fn run_smartctl_all() -> std::io::Result<String> {
         return Ok(docs);
     }
 
-    // Pass 2: elevated PowerShell execution (hidden window, no CMD window)
+    // Pass 2: elevated PowerShell execution
     let temp_dir = std::env::temp_dir();
     let out_file = temp_dir.join("asol-naki-smartctl.json");
     let _ = std::fs::remove_file(&out_file);

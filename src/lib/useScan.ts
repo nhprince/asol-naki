@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { verdictForScore, type Verdict } from "./format";
 import type {
   BatteryInfo,
@@ -15,6 +15,12 @@ export interface FraudFlag {
   detail?: string;
 }
 
+export interface GuidedTestResults {
+  display?: { pass: boolean; note?: string } | null;
+  keyboard?: { pass: boolean; note?: string } | null;
+  ports?: { pass: boolean; note?: string } | null;
+}
+
 export interface ScanState {
   running: boolean;
   hardware: FullHardwareInfo | null;
@@ -25,6 +31,7 @@ export interface ScanState {
   verdict: Verdict | null;
   cappedByCritical: boolean;
   flags: FraudFlag[];
+  guided: GuidedTestResults;
 }
 
 interface SectionError {
@@ -37,10 +44,6 @@ interface SectionError {
   message: string;
 }
 
-/**
- * Runs all diagnostic commands in parallel. A failing section is recorded
- * and skipped — one broken module must never kill the whole scan.
- */
 export function useScan() {
   const [state, setState] = useState<ScanState>({
     running: false,
@@ -52,8 +55,72 @@ export function useScan() {
     verdict: null,
     cappedByCritical: false,
     flags: [],
+    guided: {
+      display: null,
+      keyboard: null,
+      ports: null,
+    },
   });
   const [errors, setErrors] = useState<SectionError[]>([]);
+
+  const guidedRef = useRef<GuidedTestResults>(state.guided);
+  guidedRef.current = state.guided;
+
+  const calculateScoreAndVerdict = useCallback(
+    (
+      storage: StorageInfo[] | null,
+      battery: BatteryInfo | null,
+      guided: GuidedTestResults,
+      hasCritical: boolean,
+    ) => {
+      if (!storage || storage.length === 0) {
+        return { score: null, verdict: null, cappedByCritical: false };
+      }
+
+      const best = [...storage].sort(
+        (a, b) => subscoreStorage(b) - subscoreStorage(a),
+      )[0];
+      const storageScore = subscoreStorage(best);
+      const batteryScore =
+        battery?.health_percent != null
+          ? subscoreBattery(battery.health_percent)
+          : null;
+
+      // Guided Display Score
+      let displayScore = 9.5;
+      if (guided.display) {
+        displayScore = guided.display.pass ? 10.0 : 4.0;
+      }
+
+      // Guided Ports & Keyboard Score
+      let portsScore = 10.0;
+      if (guided.keyboard && !guided.keyboard.pass) portsScore -= 3.0;
+      if (guided.ports && !guided.ports.pass) portsScore -= 3.0;
+      portsScore = Math.max(0, portsScore);
+
+      const present: [number, number][] = [
+        [storageScore, 0.25],
+        [9.0, 0.25],
+        ...(batteryScore != null ? [[batteryScore, 0.2] as [number, number]] : []),
+        [displayScore, 0.15],
+        [portsScore, 0.10],
+      ];
+
+      const wSum = present.reduce((acc, [, w]) => acc + w, 0);
+      const weighted = present.reduce((acc, [s, w]) => acc + s * w, 0) / wSum;
+
+      const CRITICAL_CAP = 3.0;
+      const cappedByCritical = hasCritical && weighted > CRITICAL_CAP;
+      const finalScore = cappedByCritical
+        ? CRITICAL_CAP
+        : Math.min(10, Math.max(0, weighted));
+      const score = Math.round(finalScore * 10) / 10;
+      const verdict = verdictForScore(score);
+
+      return { score, verdict, cappedByCritical };
+    },
+    [],
+  );
 
   const run = useCallback(async () => {
     setState((s) => ({ ...s, running: true }));
@@ -83,7 +150,6 @@ export function useScan() {
       !String(bat.reason).includes("requires Windows") &&
       !String(bat.reason).includes("No battery present")
     ) {
-      // "No battery present" is a normal desktop outcome — not an error.
       errs.push({ section: "battery", message: String(bat.reason) });
     }
     if (stor.status === "fulfilled") {
@@ -97,8 +163,6 @@ export function useScan() {
       errs.push({ section: "display", message: String(disp.reason) });
     }
 
-    // Fraud checks run whenever we have hardware data; integrity failures
-    // are surfaced but never block scoring of the remaining data.
     let flags: FraudFlag[] = [];
     let hasCritical = false;
     if (hardware) {
@@ -117,40 +181,12 @@ export function useScan() {
       }
     }
 
-    // Score mirrors src-tauri/src/scoring.rs. Weights per plan.md §7
-    // normalized over present categories only.
-    let score: number | null = null;
-    let verdict: Verdict | null = null;
-    if (storage && storage.length > 0) {
-      const best = [...storage].sort(
-        (a, b) => subscoreStorage(b) - subscoreStorage(a),
-      )[0];
-      const storageScore = subscoreStorage(best);
-      const batteryScore =
-        battery?.health_percent != null
-          ? subscoreBattery(battery.health_percent)
-          : null;
-
-      const present: [number, number][] = [
-        [storageScore, 0.25],
-        [9.0, 0.25], // cpu/gpu sanity placeholder until deeper Phase 2 signals
-        ...(batteryScore != null ? [[batteryScore, 0.2] as [number, number]] : []),
-        [9.5, 0.15], // display placeholder until EDID
-        [10.0, 0.1], // ports placeholder until guided tests
-      ];
-      const wSum = present.reduce((acc, [, w]) => acc + w, 0);
-      const weighted = present.reduce((acc, [s, w]) => acc + s * w, 0) / wSum;
-
-      // plan.md §6: Critical flag caps the score at 3.0 no matter what.
-      // Mirrors src-tauri/src/scoring.rs::compute_score (round AFTER cap).
-      const CRITICAL_CAP = 3.0;
-      const cappedByCritical = hasCritical && weighted > CRITICAL_CAP;
-      const finalScore = cappedByCritical
-        ? CRITICAL_CAP
-        : Math.min(10, Math.max(0, weighted));
-      score = Math.round(finalScore * 10) / 10;
-      verdict = verdictForScore(score);
-    }
+    const { score, verdict, cappedByCritical } = calculateScoreAndVerdict(
+      storage,
+      battery,
+      guidedRef.current,
+      hasCritical,
+    );
 
     setState((prev) => ({
       ...prev,
@@ -161,12 +197,37 @@ export function useScan() {
       display,
       score,
       verdict,
+      cappedByCritical,
       flags,
     }));
     setErrors(errs);
-  }, []);
+  }, [calculateScoreAndVerdict]);
 
-  return { ...state, errors, run };
+  const updateGuidedResult = useCallback(
+    (key: keyof GuidedTestResults, result: { pass: boolean; note?: string } | null) => {
+      setState((prev) => {
+        const newGuided = { ...prev.guided, [key]: result };
+        guidedRef.current = newGuided;
+        const hasCritical = prev.flags.some((f) => f.severity === "critical");
+        const { score, verdict, cappedByCritical } = calculateScoreAndVerdict(
+          prev.storage,
+          prev.battery,
+          newGuided,
+          hasCritical,
+        );
+        return {
+          ...prev,
+          guided: newGuided,
+          score,
+          verdict,
+          cappedByCritical,
+        };
+      });
+    },
+    [calculateScoreAndVerdict],
+  );
+
+  return { ...state, errors, run, updateGuidedResult };
 }
 
 function subscoreBattery(healthPercent: number): number {
