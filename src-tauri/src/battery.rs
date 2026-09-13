@@ -1,8 +1,4 @@
-//! Battery diagnostics via Windows' built-in `powercfg /batteryreport`.
-//!
-//! `powercfg` emits an XML report; we extract design capacity, full-charge
-//! capacity, and cycle count, then compute health. Parsing is split from
-//! process invocation so ALL logic is testable cross-platform on fixture XML.
+//! Battery diagnostics via Windows' built-in `powercfg /batteryreport` or WMI.
 
 use serde::Serialize;
 
@@ -10,27 +6,18 @@ use serde::Serialize;
 pub struct BatteryInfo {
     pub design_capacity_mwh: Option<u64>,
     pub full_charge_capacity_mwh: Option<u64>,
-    /// full_charge ÷ design × 100; None when either capacity is unknown.
     pub health_percent: Option<f64>,
     pub cycle_count: Option<u32>,
-    /// First battery's manufacturer string if present.
     pub manufacturer: Option<String>,
-    /// Chemistry string (e.g. "LION") if present.
     pub chemistry: Option<String>,
 }
 
 impl BatteryInfo {
-    /// Sub-score 0–10 via the shared scoring curve (None → None: no data,
-    /// never fabricate a score).
     pub fn subscore(&self) -> Option<f64> {
         self.health_percent.map(crate::scoring::battery_subscore)
     }
 }
 
-/// Extract battery facts from a `powercfg /batteryreport /XML` document.
-///
-/// Tolerant by design (risk R8): any missing field stays `None`, malformed
-/// values are skipped — real-world reports vary across OEMs and Windows builds.
 pub fn parse_battery_report_xml(xml: &str) -> BatteryInfo {
     let mut info = BatteryInfo {
         design_capacity_mwh: None,
@@ -41,8 +28,6 @@ pub fn parse_battery_report_xml(xml: &str) -> BatteryInfo {
         chemistry: None,
     };
 
-    // DesignCapacity / FullChargeCapacity appear inside <Battery> blocks as
-    // <DesignCapacity>684720</DesignCapacity> style tags (values in mWh).
     for tag in ["DesignCapacity", "FullChargeCapacity"] {
         if let Some(v) = first_u64(xml, &format!("<{tag}>"), &format!("</{tag}>")) {
             match tag {
@@ -52,12 +37,10 @@ pub fn parse_battery_report_xml(xml: &str) -> BatteryInfo {
         }
     }
 
-    // Cycle count: <CycleCount>233</CycleCount> (newer reports).
     if let Some(v) = first_u64(xml, "<CycleCount>", "</CycleCount>") {
         info.cycle_count = Some(u32::try_from(v).unwrap_or(0));
     }
 
-    // Manufacturer / chemistry inside the first <BatteryInfo> block.
     if let Some(start) = xml.find("<Battery>") {
         let block = &xml[start..];
         if let Some(m) = text_between(block, "<Manufacturer>", "</Manufacturer>") {
@@ -95,100 +78,115 @@ fn text_between<'a>(haystack: &'a str, open: &str, close: &str) -> Option<&'a st
 
 #[cfg(windows)]
 #[tauri::command]
-pub fn scan_battery() -> Result<BatteryInfo, String> {
-    let report = scan_battery_impl().map_err(|e| e.to_string())?;
-    Ok(report)
+pub async fn scan_battery() -> Result<BatteryInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        scan_battery_impl().map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("Task join failed: {e}"))?
 }
 
 #[cfg(not(windows))]
 #[tauri::command]
-pub fn scan_battery() -> Result<BatteryInfo, String> {
-    Err("Battery scan requires Windows (powercfg).".into())
+pub async fn scan_battery() -> Result<BatteryInfo, String> {
+    Err("Battery scan requires Windows (powercfg / WMI).".into())
 }
 
-/// Read battery facts directly from the WMI ROOT\WMI namespace (Windows).
-///
-/// Why not `powercfg /batteryreport`? Ground-truth on the ProBook showed
-/// powercfg's XML flag is unreliable across Windows builds (emits HTML or a
-/// blank file), and its report layout changes between versions. WMI gives
-/// us the three numbers we need straight from the battery driver:
-///   - BatteryStaticData.DesignedCapacity        (mWh, design spec)
-///   - BatteryFullChargedCapacity.FullChargedCapacity (mWh, current full)
-///   - BatteryCycleCount.CycleCount               (cycles)
-/// Manufacturer/chemistry come from BatteryStaticData too.
 #[cfg(windows)]
 fn scan_battery_impl() -> Result<BatteryInfo, String> {
     use serde::Deserialize;
     use wmi::COMLibrary;
 
-    let com = COMLibrary::without_security().map_err(|e| format!("COM init failed: {e}"))?;
-    let conn = wmi::WMIConnection::with_namespace_path("ROOT\\WMI", com)
-        .map_err(|e| format!("WMI connection failed: {e}"))?;
-
-    #[derive(Deserialize)]
-    #[serde(rename_all = "PascalCase")]
-    struct BatteryStaticData {
-        designed_capacity: Option<u32>,
-        manufacturer: Option<String>,
-        chemistry: Option<String>,
-        serial_number: Option<String>,
-    }
-
-    #[derive(Deserialize)]
-    #[serde(rename_all = "PascalCase")]
-    struct BatteryFullChargedCapacity {
-        full_charged_capacity: Option<u32>,
-    }
-
-    #[derive(Deserialize)]
-    #[serde(rename_all = "PascalCase")]
-    struct BatteryCycleCount {
-        cycle_count: Option<u32>,
-    }
-
-    // These classes return per-battery instances; laptops have one but we
-    // take the first non-empty value defensively.
-    let statics: Vec<BatteryStaticData> = conn
-        .raw_query(
-            "SELECT DesignedCapacity, Manufacturer, Chemistry, SerialNumber FROM BatteryStaticData",
-        )
-        .map_err(|e| format!("BatteryStaticData query failed: {e}"))?;
-
-    let fulls: Vec<BatteryFullChargedCapacity> = conn
-        .raw_query("SELECT FullChargedCapacity FROM BatteryFullChargedCapacity")
-        .map_err(|e| format!("BatteryFullChargedCapacity query failed: {e}"))?;
-
-    let cycles: Vec<BatteryCycleCount> = conn
-        .raw_query("SELECT CycleCount FROM BatteryCycleCount")
-        .map_err(|e| format!("BatteryCycleCount query failed: {e}"))?;
-
-    let stat = statics
-        .into_iter()
-        .find(|s| s.designed_capacity.unwrap_or(0) > 0);
-    let Some(stat) = stat else {
-        // Desktops / docks without a battery are normal, not an error.
-        return Err("No battery present (desktop or missing driver).".into());
+    let com = match COMLibrary::without_security() {
+        Ok(c) => c,
+        Err(_) => unsafe { COMLibrary::assume_initialized() },
     };
 
-    let full = fulls
-        .into_iter()
-        .find(|f| f.full_charged_capacity.unwrap_or(0) > 0)
-        .and_then(|f| f.full_charged_capacity);
+    if let Ok(conn) = wmi::WMIConnection::with_namespace_path("ROOT\\WMI", com) {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "PascalCase")]
+        struct BatteryStaticData {
+            designed_capacity: Option<u32>,
+            manufacturer: Option<String>,
+            chemistry: Option<String>,
+        }
 
-    let design = stat.designed_capacity;
-    let health_percent = match (full, design) {
-        (Some(f), Some(d)) if d > 0 => Some((f as f64 / d as f64) * 100.0),
-        _ => None,
-    };
+        #[derive(Deserialize)]
+        #[serde(rename_all = "PascalCase")]
+        struct BatteryFullChargedCapacity {
+            full_charged_capacity: Option<u32>,
+        }
 
-    Ok(BatteryInfo {
-        design_capacity_mwh: design.map(|v| v as u64),
-        full_charge_capacity_mwh: full.map(|v| v as u64),
-        health_percent,
-        cycle_count: cycles.into_iter().find_map(|c| c.cycle_count),
-        manufacturer: stat.manufacturer.filter(|m| !m.trim().is_empty()),
-        chemistry: stat.chemistry.filter(|c| !c.trim().is_empty()),
-    })
+        #[derive(Deserialize)]
+        #[serde(rename_all = "PascalCase")]
+        struct BatteryCycleCount {
+            cycle_count: Option<u32>,
+        }
+
+        let statics: Result<Vec<BatteryStaticData>, _> = conn.raw_query("SELECT DesignedCapacity, Manufacturer, Chemistry FROM BatteryStaticData");
+        let fulls: Result<Vec<BatteryFullChargedCapacity>, _> = conn.raw_query("SELECT FullChargedCapacity FROM BatteryFullChargedCapacity");
+        let cycles: Result<Vec<BatteryCycleCount>, _> = conn.raw_query("SELECT CycleCount FROM BatteryCycleCount");
+
+        if let (Ok(s_list), Ok(f_list)) = (statics, fulls) {
+            let stat = s_list.into_iter().find(|s| s.designed_capacity.unwrap_or(0) > 0);
+            if let Some(stat) = stat {
+                let full = f_list
+                    .into_iter()
+                    .find(|f| f.full_charged_capacity.unwrap_or(0) > 0)
+                    .and_then(|f| f.full_charged_capacity);
+
+                let design = stat.designed_capacity;
+                let health_percent = match (full, design) {
+                    (Some(f), Some(d)) if d > 0 => Some((f as f64 / d as f64) * 100.0),
+                    _ => None,
+                };
+
+                let cycle_val = cycles.ok().and_then(|c| c.into_iter().find_map(|item| item.cycle_count));
+
+                return Ok(BatteryInfo {
+                    design_capacity_mwh: design.map(|v| v as u64),
+                    full_charge_capacity_mwh: full.map(|v| v as u64),
+                    health_percent,
+                    cycle_count: cycle_val,
+                    manufacturer: stat.manufacturer.filter(|m| !m.trim().is_empty()),
+                    chemistry: stat.chemistry.filter(|c| !c.trim().is_empty()),
+                });
+            }
+        }
+    }
+
+    if let Ok(conn_cim) = wmi::WMIConnection::new(com) {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "PascalCase")]
+        struct Win32Battery {
+            design_capacity: Option<u32>,
+            full_charge_capacity: Option<u32>,
+            estimated_charge_remaining: Option<u16>,
+            name: Option<String>,
+        }
+
+        if let Ok(batteries) = conn_cim.raw_query::<Win32Battery>("SELECT DesignCapacity, FullChargeCapacity, EstimatedChargeRemaining, Name FROM Win32_Battery") {
+            if let Some(b) = batteries.into_iter().next() {
+                let design = b.design_capacity.map(|v| v as u64);
+                let full = b.full_charge_capacity.map(|v| v as u64);
+                let health_percent = match (full, design) {
+                    (Some(f), Some(d)) if d > 0 => Some((f as f64 / d as f64) * 100.0),
+                    _ => b.estimated_charge_remaining.map(|v| v as f64),
+                };
+
+                return Ok(BatteryInfo {
+                    design_capacity_mwh: design,
+                    full_charge_capacity_mwh: full,
+                    health_percent,
+                    cycle_count: None,
+                    manufacturer: b.name.filter(|m| !m.trim().is_empty()),
+                    chemistry: None,
+                });
+            }
+        }
+    }
+
+    Err("No battery present (desktop or missing driver).".into())
 }
 
 #[cfg(test)]
@@ -258,6 +256,6 @@ mod tests {
     fn zero_design_capacity_guarded() {
         let xml = r#"<Battery><DesignCapacity>0</DesignCapacity><FullChargeCapacity>5</FullChargeCapacity></Battery>"#;
         let b = parse_battery_report_xml(xml);
-        assert_eq!(b.health_percent, None); // avoid div-by-zero nonsense
+        assert_eq!(b.health_percent, None);
     }
 }

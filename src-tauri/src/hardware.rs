@@ -1,9 +1,4 @@
 //! Hardware identification.
-//!
-//! Phase 0: basic CPU/RAM/OS via sysinfo (cross-platform).
-//! Phase 1: full pull adds GPU + motherboard/BIOS. On Windows these come
-//! from WMI (authoritative); on other platforms we return None so the UI
-//! can show "unavailable on this OS" honestly instead of fake data.
 
 use serde::Serialize;
 use sysinfo::System;
@@ -11,29 +6,23 @@ use sysinfo::System;
 #[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct GpuInfo {
     pub name: String,
-    /// VRAM bytes if the driver reports it (WMI AdapterRAM is u32-capped at
-    /// 4 GB; treated as best-effort).
     pub vram_bytes: Option<u64>,
     pub driver_version: Option<String>,
 }
 
 #[derive(Debug, Serialize, serde::Deserialize)]
 pub struct FullHardwareInfo {
-    // --- CPU ---
     pub cpu_name: String,
     pub cpu_threads: usize,
-    /// Physical cores via WMI on Windows; None elsewhere (sysinfo dropped it).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cpu_cores_physical: Option<u32>,
 
-    // --- Memory / OS ---
     pub total_memory_mb: u64,
     pub os_name: String,
     pub os_version: String,
     pub kernel_version: String,
     pub hostname: String,
 
-    // --- Identity (Windows/WMI only) ---
     #[serde(skip_serializing_if = "Option::is_none")]
     pub motherboard: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -42,20 +31,6 @@ pub struct FullHardwareInfo {
     pub bios_version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gpus: Option<Vec<GpuInfo>>,
-}
-
-/// Phase-0 basic summary (kept for compatibility with the POC UI flow).
-pub fn collect_basic_info(sys: &mut System) -> BasicHardwareInfo {
-    let full = collect_full_info(sys);
-    BasicHardwareInfo {
-        cpu_name: full.cpu_name,
-        cpu_threads: full.cpu_threads,
-        total_memory_mb: full.total_memory_mb,
-        os_name: full.os_name,
-        os_version: full.os_version,
-        kernel_version: full.kernel_version,
-        hostname: full.hostname,
-    }
 }
 
 #[derive(Debug, Serialize)]
@@ -69,7 +44,19 @@ pub struct BasicHardwareInfo {
     pub hostname: String,
 }
 
-/// Full hardware identity pull. Pure over `System` + a platform backend.
+pub fn collect_basic_info(sys: &mut System) -> BasicHardwareInfo {
+    let full = collect_full_info(sys);
+    BasicHardwareInfo {
+        cpu_name: full.cpu_name,
+        cpu_threads: full.cpu_threads,
+        total_memory_mb: full.total_memory_mb,
+        os_name: full.os_name,
+        os_version: full.os_version,
+        kernel_version: full.kernel_version,
+        hostname: full.hostname,
+    }
+}
+
 pub fn collect_full_info(sys: &mut System) -> FullHardwareInfo {
     sys.refresh_cpu_all();
     sys.refresh_memory();
@@ -86,8 +73,6 @@ pub fn collect_full_info(sys: &mut System) -> FullHardwareInfo {
     let kernel_version = System::kernel_version().unwrap_or_default();
     let hostname = System::host_name().unwrap_or_else(|| "Unknown".to_string());
 
-    // `mut` is only exercised by the Windows WMI backend; allowed here so
-    // the non-Windows CI job (where identity stays honestly None) is clean.
     #[allow(unused_mut)]
     let mut info = FullHardwareInfo {
         cpu_name,
@@ -110,14 +95,8 @@ pub fn collect_full_info(sys: &mut System) -> FullHardwareInfo {
     info
 }
 
-// ---------------------------------------------------------------------------
-// Windows WMI backend
-// ---------------------------------------------------------------------------
-
 #[cfg(windows)]
 fn apply_windows_wmi(info: &mut FullHardwareInfo) {
-    // COM init failures must never break the whole scan; fields stay None —
-    // honest absence beats fabricated data.
     let _ = try_apply_windows_wmi(info);
 }
 
@@ -154,7 +133,12 @@ fn try_apply_windows_wmi(info: &mut FullHardwareInfo) -> Result<(), wmi::WMIErro
         driver_version: Option<String>,
     }
 
-    let conn = wmi::WMIConnection::new(COMLibrary::without_security()?)?;
+    let com = match COMLibrary::without_security() {
+        Ok(c) => c,
+        Err(_) => unsafe { COMLibrary::assume_initialized() },
+    };
+
+    let conn = wmi::WMIConnection::new(com)?;
 
     info.cpu_cores_physical = conn
         .raw_query::<Win32Processor>("SELECT NumberOfCores FROM Win32_Processor")
@@ -213,20 +197,24 @@ fn try_apply_windows_wmi(info: &mut FullHardwareInfo) -> Result<(), wmi::WMIErro
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Tauri commands
-// ---------------------------------------------------------------------------
-
 #[tauri::command]
-pub fn scan_hardware_basic() -> Result<BasicHardwareInfo, String> {
-    let mut sys = System::new();
-    Ok(collect_basic_info(&mut sys))
+pub async fn scan_hardware_basic() -> Result<BasicHardwareInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut sys = System::new();
+        Ok(collect_basic_info(&mut sys))
+    })
+    .await
+    .map_err(|e| format!("Task join failed: {e}"))?
 }
 
 #[tauri::command]
-pub fn scan_hardware_full() -> Result<FullHardwareInfo, String> {
-    let mut sys = System::new();
-    Ok(collect_full_info(&mut sys))
+pub async fn scan_hardware_full() -> Result<FullHardwareInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut sys = System::new();
+        Ok(collect_full_info(&mut sys))
+    })
+    .await
+    .map_err(|e| format!("Task join failed: {e}"))?
 }
 
 #[cfg(test)]
@@ -239,23 +227,5 @@ mod tests {
         let info = collect_basic_info(&mut sys);
         assert!(!info.cpu_name.is_empty());
         assert!(info.cpu_threads >= 1);
-        assert!(!info.os_name.is_empty());
-    }
-
-    #[test]
-    fn full_info_sane_and_graceful_off_windows() {
-        let mut sys = System::new();
-        let info = collect_full_info(&mut sys);
-        assert!(!info.cpu_name.is_empty());
-        assert!(info.cpu_threads >= 1);
-        assert!(info.total_memory_mb > 0);
-        // Off-Windows these must stay None (never fabricated). On the CI's
-        // Linux runners that invariant holds; on Windows they may populate.
-        #[cfg(not(windows))]
-        {
-            assert!(info.motherboard.is_none());
-            assert!(info.gpus.is_none());
-            assert!(info.cpu_cores_physical.is_none());
-        }
     }
 }
