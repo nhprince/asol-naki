@@ -1,10 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { DisplayTestModal } from "./components/DisplayTestModal";
-import { KeyboardTestModal } from "./components/KeyboardTestModal";
 import { LanguageToggle } from "./components/LanguageToggle";
-import { OptionalSpeedTest } from "./components/OptionalSpeedTest";
-import { PortTestModal } from "./components/PortTestModal";
 import { PrintButton } from "./components/PrintButton";
 import { ReportCard } from "./components/ReportCard";
 import { useScan } from "./lib/useScan";
@@ -36,8 +32,7 @@ export function App() {
   const scan = useScan();
   const runScan = scan.run;
 
-  const [activeModal, setActiveModal] = useState<"display" | "keyboard" | "ports" | null>(null);
-
+  // Auto-scan on launch so the window never looks empty.
   useEffect(() => {
     void runScan();
   }, [runScan]);
@@ -102,74 +97,6 @@ export function App() {
           </section>
         )}
 
-        {/* Guided Diagnostics Section */}
-        <Section title={t("guided.sectionTitle", "Guided Manual Tests")}>
-          <div className="flex flex-col gap-2 p-3">
-            <div className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-3 ring-1 ring-white/5">
-              <div>
-                <p className="text-sm font-medium">{t("guided.displayCheck", "Display Pixel & Bleed Check")}</p>
-                <p className="text-xs text-white/60">
-                  {scan.guided.display
-                    ? scan.guided.display.pass
-                      ? t("guided.passed", "Passed ✓")
-                      : t("guided.failed", "Failed ✗")
-                    : t("guided.notTested", "Not tested yet")}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveModal("display")}
-                className="rounded-lg bg-emerald-500/20 px-3 py-1.5 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/30 transition hover:bg-emerald-500/30"
-              >
-                {t("guided.start", "Start Test")}
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-3 ring-1 ring-white/5">
-              <div>
-                <p className="text-sm font-medium">{t("guided.keyboardCheck", "Interactive Keyboard Check")}</p>
-                <p className="text-xs text-white/60">
-                  {scan.guided.keyboard
-                    ? scan.guided.keyboard.pass
-                      ? t("guided.passed", "Passed ✓")
-                      : t("guided.failed", "Failed ✗")
-                    : t("guided.notTested", "Not tested yet")}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveModal("keyboard")}
-                className="rounded-lg bg-emerald-500/20 px-3 py-1.5 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/30 transition hover:bg-emerald-500/30"
-              >
-                {t("guided.start", "Start Test")}
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-3 ring-1 ring-white/5">
-              <div>
-                <p className="text-sm font-medium">{t("guided.portsCheck", "Ports & Connectivity Check")}</p>
-                <p className="text-xs text-white/60">
-                  {scan.guided.ports
-                    ? scan.guided.ports.pass
-                      ? t("guided.passed", "Passed ✓")
-                      : t("guided.failed", "Failed ✗")
-                    : t("guided.notTested", "Not tested yet")}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveModal("ports")}
-                className="rounded-lg bg-emerald-500/20 px-3 py-1.5 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/30 transition hover:bg-emerald-500/30"
-              >
-                {t("guided.start", "Start Test")}
-              </button>
-            </div>
-          </div>
-        </Section>
-
-        {/* Optional Speed Test */}
-        <OptionalSpeedTest />
-
         {/* Fraud flags */}
         {scan.flags.length > 0 && (
           <section
@@ -225,7 +152,7 @@ export function App() {
           {scan.running ? t("scan.running") : t("home.scanButton")}
         </button>
 
-        {/* Per-section errors */}
+        {/* Per-section errors — one failed module never hides the rest */}
         {scan.errors.map((e) => (
           <p
             key={e.section}
@@ -317,29 +244,6 @@ export function App() {
           {t("footer.phaseNote")}
         </p>
       </main>
-
-      {/* Test Modals */}
-      <DisplayTestModal
-        isOpen={activeModal === "display"}
-        onClose={(res) => {
-          setActiveModal(null);
-          if (res) scan.updateGuidedResult("display", res);
-        }}
-      />
-      <KeyboardTestModal
-        isOpen={activeModal === "keyboard"}
-        onClose={(res) => {
-          setActiveModal(null);
-          if (res) scan.updateGuidedResult("keyboard", res);
-        }}
-      />
-      <PortTestModal
-        isOpen={activeModal === "ports"}
-        onClose={(res) => {
-          setActiveModal(null);
-          if (res) scan.updateGuidedResult("ports", res);
-        }}
-      />
     </div>
   );
 }
@@ -451,6 +355,7 @@ function Row({
 }
 
 function fmtNum(n: number, _bn: boolean): string {
+  // Digits are localized by toBengaliDigits at render time.
   return new Intl.NumberFormat("en-US").format(n);
 }
 

@@ -56,55 +56,6 @@
     "severityWarning": "WARNING",
     "severityInfo": "INFO"
   },
-  "guided": {
-    "sectionTitle": "Guided Manual Tests",
-    "displayCheck": "Display Pixel & Bleed Check",
-    "keyboardCheck": "Interactive Keyboard Check",
-    "portsCheck": "Ports & Connectivity Check",
-    "passed": "Passed ✓",
-    "failed": "Failed ✗",
-    "notTested": "Not tested yet",
-    "start": "Start Test"
-  },
-  "guidedDisplay": {
-    "title": "Display Pixel & Bleed Check",
-    "instruction": "Click or press Space to cycle colors",
-    "question": "Did you notice any dead pixels, stuck pixels, or backlight bleed?",
-    "pass": "Screen Clean (Pass)",
-    "fail": "Defects Found",
-    "cancel": "Cancel Test"
-  },
-  "guidedKeyboard": {
-    "title": "Interactive Keyboard Tester",
-    "subtitle": "Press every key on the keyboard to verify responsiveness.",
-    "keysTested": "Tested",
-    "reset": "Reset Layout",
-    "pass": "All Keys Working",
-    "fail": "Keys Unresponsive"
-  },
-  "guidedPorts": {
-    "title": "Ports & Connectivity Check",
-    "subtitle": "Plug in a drive, headphones, or display cable to verify physical port function.",
-    "usb": "USB Ports (A / C)",
-    "hdmi": "HDMI / Display Output",
-    "audio": "3.5mm Headphone Jack / Audio Output",
-    "wifi": "Wi-Fi Connectivity",
-    "bluetooth": "Bluetooth Adapter",
-    "charger": "AC Adapter / Charging Port",
-    "working": "Working ✓",
-    "failed": "Failed ✗",
-    "cancel": "Cancel",
-    "done": "Save Checklist Results"
-  },
-  "optional": {
-    "speedTestTitle": "Optional Internet Speed Test",
-    "speedTestDesc": "Verifies Wi-Fi adapter throughput & latency.",
-    "startTest": "Run Test",
-    "testing": "Testing…",
-    "download": "Speed",
-    "latency": "Latency",
-    "offlineError": "Offline or test host unreachable. Core functions remain unaffected."
-  },
   "error": {
     "sectionFailed": "{{section}}: {{message}}",
     "scanFailed": "Scan failed — {{message}}",
@@ -113,10 +64,9 @@
   "report": {
     "copy": "Copy report",
     "copied": "Copied ✓",
-    "exportImage": "Save Image",
     "print": "Save as PDF"
   },
   "footer": {
-    "phaseNote": "Production Ready — Complete diagnostic & fraud detection engine."
+    "phaseNote": "Phase 1 preview — storage & battery need Windows; scoring calibrates over time."
   }
 }

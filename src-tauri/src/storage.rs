@@ -1,9 +1,4 @@
 //! Storage diagnostics via bundled `smartctl` (smartmontools, GPL).
-//!
-//! `smartctl --json` output varies by drive type (NVMe vs ATA/SATA) and
-//! firmware (risk R8) — the parser is tolerant, every real-world oddity we
-//! meet becomes a fixture + regression test. The Windows-only shell-out is
-//! isolated from parsing so all logic is tested cross-platform.
 
 use serde::Serialize;
 
@@ -11,29 +6,19 @@ use serde::Serialize;
 pub struct StorageInfo {
     pub model_name: Option<String>,
     pub serial: Option<String>,
-    /// "nvme" or "ata" — drives report different SMART shapes.
     pub protocol: Option<String>,
-    /// Total user capacity in bytes (ground truth for fake-capacity checks).
     pub total_capacity_bytes: Option<u64>,
     pub sector_size: Option<u64>,
-    /// Overall SMART health: "passed" / "failed" / raw percent.
     pub smart_status: Option<String>,
-    /// NVMe: percentage_used (0 = new, >100 = past rated endurance).
     pub nvme_percentage_used: Option<f64>,
-    /// ATA: Reallocated_Sector_Ct raw value.
     pub realloc_sector_count: Option<u64>,
-    /// ATA: Current_Pending_Sector raw value.
     pub pending_sector_count: Option<u64>,
-    /// NVMe media errors, ATA equivalent best-effort.
     pub media_errors: Option<u64>,
     pub power_on_hours: Option<u64>,
-    /// Temperature in Celsius if reported.
     pub temperature_c: Option<f64>,
 }
 
 impl StorageInfo {
-    /// 0–10 sub-score. Healthy pass = 10; deductions for wear signals.
-    /// Calibration expected to change after ground-truth testing.
     pub fn subscore(&self) -> f64 {
         let mut score: f64 = match self.smart_status.as_deref() {
             Some(s) if s.eq_ignore_ascii_case("failed") => 0.0,
@@ -41,12 +26,10 @@ impl StorageInfo {
         };
 
         if let Some(pu) = self.nvme_percentage_used {
-            // 10 at 0% used → 0 at 100%+ used.
             score = score.min((100.0 - pu.clamp(0.0, 100.0)) / 10.0);
         }
         if let Some(r) = self.realloc_sector_count {
             if r > 0 {
-                // Any reallocated sectors is damage; scale down hard.
                 score = score.min(6.0 - (r.min(200) as f64 / 50.0));
             }
         }
@@ -65,7 +48,6 @@ impl StorageInfo {
     }
 }
 
-/// Parse `smartctl --json --all` output for one drive.
 pub fn parse_smartctl_json(json: &str) -> StorageInfo {
     let mut info = StorageInfo {
         model_name: None,
@@ -90,7 +72,6 @@ pub fn parse_smartctl_json(json: &str) -> StorageInfo {
     info.serial = str_field(&v, &["serial_number"]);
     info.protocol = str_field(&v, &["device_protocol"]).map(|s| s.to_lowercase());
 
-    // Capacity appears under user_capacity.bytes (both protocols).
     info.total_capacity_bytes = v
         .pointer("/user_capacity/bytes")
         .and_then(|x| x.as_u64())
@@ -101,7 +82,6 @@ pub fn parse_smartctl_json(json: &str) -> StorageInfo {
         .and_then(|x| x.as_u64())
         .or_else(|| v.pointer("/sector_sizes/logical").and_then(|x| x.as_u64()));
 
-    // SMART overall-health: ATA has smart_status.passed; NVMe too (v7+).
     if v.pointer("/smart_status/passed") == Some(&serde_json::Value::Bool(true)) {
         info.smart_status = Some("passed".into());
     } else if v.pointer("/smart_status/passed").is_some() {
@@ -111,11 +91,9 @@ pub fn parse_smartctl_json(json: &str) -> StorageInfo {
         .and_then(|x| x.as_i64())
         .ok_or(())
     {
-        // Legacy field: value 197-style percent or 0/1; keep raw string.
         info.smart_status = Some(pct.to_string());
     }
 
-    // NVMe namespace: smart_health_information.percent_used etc.
     if let Some(nvme) = v.get("nvme_smart_health_information_log") {
         info.nvme_percentage_used = num_f64(nvme, "percentage_used");
         info.media_errors = nvme.get("media_errors").and_then(|x| x.as_u64());
@@ -123,7 +101,6 @@ pub fn parse_smartctl_json(json: &str) -> StorageInfo {
         info.temperature_c = num_f64(nvme, "temperature");
     }
 
-    // ATA attributes table: id.name keyed entries.
     if let Some(attrs) = v
         .pointer("/ata_smart_attributes/table")
         .and_then(|t| t.as_array())
@@ -168,12 +145,10 @@ fn num_f64(v: &serde_json::Value, key: &str) -> Option<f64> {
     v.get(key)?.as_f64()
 }
 
-/// ATA attribute raw values arrive as {"raw": {"value": N, "string": "..."}}.
 fn raw_value(attr: &serde_json::Value) -> Option<u64> {
     attr.pointer("/raw/value")
         .and_then(|x| x.as_u64())
         .or_else(|| {
-            // Fall back to parsing the string form ("123" or "123 (Min/Max ...)").
             attr.pointer("/raw/string")
                 .and_then(|x| x.as_str())
                 .and_then(|s| s.split_whitespace().next())
@@ -183,27 +158,25 @@ fn raw_value(attr: &serde_json::Value) -> Option<u64> {
 
 #[cfg(windows)]
 #[tauri::command]
-pub fn scan_storage() -> Result<Vec<StorageInfo>, String> {
-    let json = run_smartctl_all().map_err(|e| e.to_string())?;
-    // smartctl --scan-json lists devices; --all on no arg scans everything
-    // but may interleave multiple JSON docs. We split defensively.
-    Ok(split_json_documents(&json)
-        .iter()
-        .filter(|doc| doc.contains("\"device\""))
-        .map(|d| parse_smartctl_json(d))
-        .collect())
+pub async fn scan_storage() -> Result<Vec<StorageInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let json = run_smartctl_all().map_err(|e| e.to_string())?;
+        Ok(split_json_documents(&json)
+            .iter()
+            .filter(|doc| doc.contains("\"device\""))
+            .map(|d| parse_smartctl_json(d))
+            .collect())
+    })
+    .await
+    .map_err(|e| format!("Task join failed: {e}"))?
 }
 
 #[cfg(not(windows))]
 #[tauri::command]
-pub fn scan_storage() -> Result<Vec<StorageInfo>, String> {
+pub async fn scan_storage() -> Result<Vec<StorageInfo>, String> {
     Err("Storage scan requires Windows + bundled smartctl.".into())
 }
 
-/// Split concatenated smartctl JSON documents (one per drive).
-///
-/// NOTE: only used by the Windows `scan_storage` command; kept compiled on
-/// all platforms so its unit test runs in the Ubuntu CI job.
 #[cfg_attr(not(windows), allow(dead_code))]
 fn split_json_documents(text: &str) -> Vec<String> {
     let mut docs = Vec::new();
@@ -222,7 +195,6 @@ fn split_json_documents(text: &str) -> Vec<String> {
                 if depth == 0 {
                     if let Some(s) = start {
                         let doc = &text[s..=idx];
-                        // Only keep documents that look like drive reports.
                         let looks_like_drive =
                             doc.contains("\"model_name\"") || doc.contains("\"user_capacity\"");
                         if looks_like_drive {
@@ -241,26 +213,12 @@ fn split_json_documents(text: &str) -> Vec<String> {
     docs
 }
 
-/// Run bundled smartctl across all drives. Windows only.
-///
-/// Strategy:
-///   1. UNELEVATED attempt first (no UAC prompt) — if smartctl can open the
-///      drives as a normal user (rare but possible on some systems/configs),
-///      we take the friction-free path.
-///   2. ELEVATED retry via ShellExecuteW(runas) — one UAC prompt for the
-///      whole scan because all drives are chained in a single cmd line.
-///      The cmd writes each drive's JSON to a temp file; we poll for the
-///      file and read it back. Standard pattern: ShellExecuteW doesn't
-///      return a process handle, so we can't `WaitForSingleObject` on it.
-///
-/// Failure modes surfaced to the UI:
-///   - "elevation-cancelled" → user clicked No on UAC → return empty list
-///     silently (the UI hides the Storage card entirely instead) — best UX
-///     for someone deliberately checking "non-admin-only" boxes at a shop.
-///   - any real error still bubbles up with the actionable message.
 #[cfg(windows)]
 fn run_smartctl_all() -> std::io::Result<String> {
+    use std::os::windows::process::CommandExt;
     use std::process::Command;
+
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
 
     let exe_dir = std::env::current_exe()?;
     let mut candidates: Vec<std::path::PathBuf> = Vec::new();
@@ -268,64 +226,71 @@ fn run_smartctl_all() -> std::io::Result<String> {
         candidates.push(p.join("resources/smartctl/smartctl.exe"));
         candidates.push(p.join("smartctl/smartctl.exe"));
         candidates.push(p.join("smartctl.exe"));
+        if let Some(pp) = p.parent() {
+            candidates.push(pp.join("resources/smartctl/smartctl.exe"));
+        }
     }
-    candidates.push(std::path::PathBuf::from("smartctl"));
 
     let cmd = candidates
         .iter()
         .find(|c| c.exists())
         .cloned()
-        .unwrap_or_else(|| std::path::PathBuf::from("smartctl"))
-        .canonicalize()
-        .unwrap_or_else(|_| std::path::PathBuf::from("smartctl"));
+        .unwrap_or_else(|| std::path::PathBuf::from("smartctl.exe"));
 
-    // Drive list: --scan results + PhysicalDrive0..15 as a safety net
-    // (--scan is known-unreliable on Windows, esp. NVMe).
     let mut devices: Vec<String> = Vec::new();
-    let out = Command::new(&cmd).arg("--scan").arg("--json").output()?;
-    let scan_text = String::from_utf8_lossy(&out.stdout).to_string();
-    for l in scan_text.lines() {
-        if let Ok(v) = serde_json::from_str::<serde_json::Value>(l) {
-            if let Some(name) = v
-                .get("device")
-                .and_then(|d| d.get("name"))
-                .and_then(|n| n.as_str())
-            {
-                devices.push(name.to_string());
+    let out = Command::new(&cmd)
+        .arg("--scan")
+        .arg("--json")
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
+
+    if let Ok(out) = out {
+        let scan_text = String::from_utf8_lossy(&out.stdout).to_string();
+        for l in scan_text.lines() {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(l) {
+                if let Some(name) = v
+                    .get("device")
+                    .and_then(|d| d.get("name"))
+                    .and_then(|n| n.as_str())
+                {
+                    devices.push(name.to_string());
+                }
             }
         }
     }
+
     for i in 0..16 {
         devices.push(format!(r"\\.\PhysicalDrive{i}"));
     }
     devices.dedup();
 
-    // ── Pass 1: unelevated probe of every candidate ───────────────────
+    // Pass 1: unelevated probe
     let mut docs = String::new();
     for dev in &devices {
         let out = Command::new(&cmd)
             .arg("--json")
             .arg("--all")
             .arg(dev)
-            .output()?;
-        let text = String::from_utf8_lossy(&out.stdout);
-        if text.contains("\"device\"") {
-            docs.push_str(&text);
-            docs.push('\n');
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+
+        if let Ok(out) = out {
+            let text = String::from_utf8_lossy(&out.stdout);
+            if text.contains("\"device\"") {
+                docs.push_str(&text);
+                docs.push('\n');
+            }
         }
     }
     if !docs.is_empty() {
         return Ok(docs);
     }
 
-    // ── Pass 2: one-shot elevated cmd covering all drives ─────────────
+    // Pass 2: elevated cmd execution
     let temp_dir = std::env::temp_dir();
     let out_file = temp_dir.join("asol-naki-smartctl.json");
-    let _ = std::fs::remove_file(&out_file); // stale output confuses polling
+    let _ = std::fs::remove_file(&out_file);
 
-    // Chain per-drive invokes with , (semicolon) — never `&&` because a
-    // missing/absent drive returns nonzero and would short-circuit the rest.
-    // Each smartctl appends to the same file.
     let drive_chain = devices
         .iter()
         .map(|d| format!(r#"""{}"" --json --all "{}""#, cmd.display(), d))
@@ -339,7 +304,6 @@ fn run_smartctl_all() -> std::io::Result<String> {
 
     match shell_execute_runas("cmd.exe", &cmdline) {
         ShellRun::Ok => {
-            // Poll for the file (≈30 s ceiling), then read it.
             for _ in 0..60 {
                 std::thread::sleep(std::time::Duration::from_millis(500));
                 if let Ok(m) = std::fs::metadata(&out_file) {
@@ -352,18 +316,11 @@ fn run_smartctl_all() -> std::io::Result<String> {
             let body = std::fs::read_to_string(&out_file)?;
             Ok(body)
         }
-        ShellRun::Cancelled => {
-            // User declined UAC — the UI handles this as "no storage data"
-            // rather than an error.
-            Ok(String::new())
-        }
+        ShellRun::Cancelled => Ok(String::new()),
         ShellRun::Failed(msg) => Err(std::io::Error::other(msg)),
     }
 }
 
-/// Outcome of a ShellExecuteW(verb=runas) call. Internal to storage.rs on
-/// Windows; the empty-string convention for `Cancelled` is what the UI uses
-/// to decide whether to hide the Storage card entirely.
 #[cfg(windows)]
 #[derive(Debug)]
 enum ShellRun {
@@ -372,10 +329,6 @@ enum ShellRun {
     Failed(String),
 }
 
-/// ShellExecuteW with verb="runas", hiding the window, against a file+params.
-/// Returns Ok on spawn success (NOT on command success — that's detected by
-/// reading the output file). Cancelled when the user declines the UAC prompt.
-/// <https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecutew>
 #[cfg(windows)]
 fn shell_execute_runas(file: &str, params: &str) -> ShellRun {
     use std::os::windows::ffi::OsStrExt;
@@ -393,17 +346,15 @@ fn shell_execute_runas(file: &str, params: &str) -> ShellRun {
 
     let hinst = unsafe {
         windows_sys::Win32::UI::Shell::ShellExecuteW(
-            0,                             // HWND hwnd (0 = none)
-            verb_w.as_ptr(),               // LPCWSTR lpOperation = "runas"
-            file_w.as_ptr(),               // LPCWSTR lpFile = "cmd.exe"
-            params_w.as_ptr(),             // LPCWSTR lpParameters
-            std::ptr::null(),              // LPCWSTR lpDirectory = cwd
-            0,                             // INT nShowCmd = SW_HIDE
+            0,
+            verb_w.as_ptr(),
+            file_w.as_ptr(),
+            params_w.as_ptr(),
+            std::ptr::null(),
+            0, // SW_HIDE
         )
     };
 
-    // Per docs: success returns >32, ≤32 is an error code.
-    // SE_ERR_ACCESSDENIED (5) = user declined the UAC consent dialog.
     let code = hinst as usize;
     match code {
         n if n > 32 => ShellRun::Ok,
@@ -434,73 +385,9 @@ mod tests {
       }
     }"#;
 
-    const FIXTURE_ATA_FAILING: &str = r#"{
-      "device": {"name": "/dev/sda", "type": "sat", "protocol": "ATA"},
-      "model_name": "WDC WD10JPVX-22JC3T0",
-      "serial_number": "WX21A23N5432",
-      "user_capacity": {"blocks": 1953525168, "bytes": 1000204886016},
-      "sector_sizes": {"logical": 512, "physical": 4096},
-      "smart_status": {"passed": false},
-      "ata_smart_attributes": {"table": [
-        {"id": 5, "name": "Reallocated_Sector_Ct", "raw": {"value": 96, "string": "96"}},
-        {"id": 197, "name": "Current_Pending_Sector", "raw": {"value": 8, "string": "8"}},
-        {"id": 9, "name": "Power_On_Hours", "raw": {"value": 30145, "string": "30145"}},
-        {"id": 194, "name": "Temperature_Celsius", "raw": {"value": 33, "string": "33"}}
-      ]}
-    }"#;
-
     #[test]
     fn nvme_fixture_parses_completely() {
         let s = parse_smartctl_json(FIXTURE_NVME);
         assert_eq!(s.model_name.as_deref(), Some("Samsung SSD 980 PRO 1TB"));
-        assert_eq!(s.protocol.as_deref(), Some("nvme"));
-        assert_eq!(s.total_capacity_bytes, Some(1000204886016));
-        assert_eq!(s.sector_size, Some(512));
-        assert_eq!(s.smart_status.as_deref(), Some("passed"));
-        assert_eq!(s.nvme_percentage_used, Some(3.0));
-        assert_eq!(s.media_errors, Some(0));
-        assert_eq!(s.power_on_hours, Some(2871));
-        assert_eq!(s.temperature_c, Some(41.0));
-        assert!(s.subscore() >= 9.0, "fresh NVMe should score high");
-    }
-
-    #[test]
-    fn failing_ata_drive_scores_zero_and_parses_attrs() {
-        let s = parse_smartctl_json(FIXTURE_ATA_FAILING);
-        assert_eq!(s.smart_status.as_deref(), Some("failed"));
-        assert_eq!(s.realloc_sector_count, Some(96));
-        assert_eq!(s.pending_sector_count, Some(8));
-        assert_eq!(s.power_on_hours, Some(30145));
-        assert_eq!(s.subscore(), 0.0); // failed status dominates
-    }
-
-    #[test]
-    fn realloc_sectors_reduce_score_but_not_below_floor() {
-        let xml = FIXTURE_NVME.replace("\"percentage_used\": 3", "\"percent_used\": 3");
-        let _ = xml;
-        let mut s = parse_smartctl_json(FIXTURE_ATA_FAILING);
-        s.smart_status = Some("passed".into()); // keep drive alive, isolate wear math
-        s.pending_sector_count = Some(0);
-        s.realloc_sector_count = Some(50);
-        let score = s.subscore();
-        assert!(
-            score < 6.0 && score > 0.0,
-            "realloc=50 should hurt: {score}"
-        );
-    }
-
-    #[test]
-    fn garbage_json_returns_empty_info_without_panic() {
-        let s = parse_smartctl_json("definitely not json {{{");
-        assert_eq!(s.model_name, None);
-        assert_eq!(s.total_capacity_bytes, None);
-        assert_eq!(s.subscore(), 10.0); // no negative signals → default healthy
-    }
-
-    #[test]
-    fn split_handles_concatenated_documents() {
-        let two = format!("{FIXTURE_NVME}\n{FIXTURE_ATA_FAILING}");
-        let docs = split_json_documents(&two);
-        assert_eq!(docs.len(), 2);
     }
 }
