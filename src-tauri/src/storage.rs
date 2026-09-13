@@ -220,7 +220,7 @@ fn run_smartctl_all() -> std::io::Result<String> {
 
     const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-    let exe_dir = std::env::current_exe()?;
+    let exe_dir = std::env::current_exe().unwrap_or_default();
     let mut candidates: Vec<std::path::PathBuf> = Vec::new();
     if let Some(p) = exe_dir.parent() {
         candidates.push(p.join("resources/smartctl/smartctl.exe"));
@@ -228,14 +228,17 @@ fn run_smartctl_all() -> std::io::Result<String> {
         candidates.push(p.join("smartctl.exe"));
         if let Some(pp) = p.parent() {
             candidates.push(pp.join("resources/smartctl/smartctl.exe"));
+            candidates.push(pp.join("smartctl/smartctl.exe"));
         }
     }
 
-    let cmd = candidates
-        .iter()
-        .find(|c| c.exists())
-        .cloned()
-        .unwrap_or_else(|| std::path::PathBuf::from("smartctl.exe"));
+    let cmd_opt = candidates.iter().find(|c| c.exists()).cloned();
+    let Some(cmd) = cmd_opt else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "smartctl component missing from app bundle. Please ensure smartctl.exe is present.",
+        ));
+    };
 
     let mut devices: Vec<String> = Vec::new();
     let out = Command::new(&cmd)
@@ -286,23 +289,23 @@ fn run_smartctl_all() -> std::io::Result<String> {
         return Ok(docs);
     }
 
-    // Pass 2: elevated cmd execution
+    // Pass 2: elevated PowerShell execution (hidden window, no CMD window)
     let temp_dir = std::env::temp_dir();
     let out_file = temp_dir.join("asol-naki-smartctl.json");
     let _ = std::fs::remove_file(&out_file);
 
     let drive_chain = devices
         .iter()
-        .map(|d| format!(r#"""{}"" --json --all "{}""#, cmd.display(), d))
+        .map(|d| format!(r#"& '{cmd_path}' --json --all '{d}'"#, cmd_path = cmd.display()))
         .collect::<Vec<_>>()
-        .join(" 2>nul , ");
+        .join(" ; ");
 
-    let cmdline = format!(
-        r#"/c "{drive_chain}" 2>nul > "{}""#,
-        out_file.display()
+    let ps_command = format!(
+        r#"$ErrorActionPreference = 'SilentlyContinue'; {drive_chain} | Out-File -FilePath '{out_path}' -Encoding utf8"#,
+        out_path = out_file.display()
     );
 
-    match shell_execute_runas("cmd.exe", &cmdline) {
+    match shell_execute_runas("powershell.exe", &format!("-NoProfile -WindowStyle Hidden -Command \"{ps_command}\"")) {
         ShellRun::Ok => {
             for _ in 0..60 {
                 std::thread::sleep(std::time::Duration::from_millis(500));

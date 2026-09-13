@@ -102,67 +102,91 @@ fn scan_battery_impl() -> Result<BatteryInfo, String> {
         Err(_) => unsafe { COMLibrary::assume_initialized() },
     };
 
-    let conn = wmi::WMIConnection::with_namespace_path("ROOT\\WMI", com)
-        .map_err(|e| format!("WMI connection failed: {e}"))?;
+    if let Ok(conn) = wmi::WMIConnection::with_namespace_path("ROOT\\WMI", com) {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "PascalCase")]
+        struct BatteryStaticData {
+            designed_capacity: Option<u32>,
+            manufacturer: Option<String>,
+            chemistry: Option<String>,
+        }
 
-    #[derive(Deserialize)]
-    #[serde(rename_all = "PascalCase")]
-    struct BatteryStaticData {
-        designed_capacity: Option<u32>,
-        manufacturer: Option<String>,
-        chemistry: Option<String>,
+        #[derive(Deserialize)]
+        #[serde(rename_all = "PascalCase")]
+        struct BatteryFullChargedCapacity {
+            full_charged_capacity: Option<u32>,
+        }
+
+        #[derive(Deserialize)]
+        #[serde(rename_all = "PascalCase")]
+        struct BatteryCycleCount {
+            cycle_count: Option<u32>,
+        }
+
+        let statics: Result<Vec<BatteryStaticData>, _> = conn.raw_query("SELECT DesignedCapacity, Manufacturer, Chemistry FROM BatteryStaticData");
+        let fulls: Result<Vec<BatteryFullChargedCapacity>, _> = conn.raw_query("SELECT FullChargedCapacity FROM BatteryFullChargedCapacity");
+        let cycles: Result<Vec<BatteryCycleCount>, _> = conn.raw_query("SELECT CycleCount FROM BatteryCycleCount");
+
+        if let (Ok(s_list), Ok(f_list)) = (statics, fulls) {
+            let stat = s_list.into_iter().find(|s| s.designed_capacity.unwrap_or(0) > 0);
+            if let Some(stat) = stat {
+                let full = f_list
+                    .into_iter()
+                    .find(|f| f.full_charged_capacity.unwrap_or(0) > 0)
+                    .and_then(|f| f.full_charged_capacity);
+
+                let design = stat.designed_capacity;
+                let health_percent = match (full, design) {
+                    (Some(f), Some(d)) if d > 0 => Some((f as f64 / d as f64) * 100.0),
+                    _ => None,
+                };
+
+                let cycle_val = cycles.ok().and_then(|c| c.into_iter().find_map(|item| item.cycle_count));
+
+                return Ok(BatteryInfo {
+                    design_capacity_mwh: design.map(|v| v as u64),
+                    full_charge_capacity_mwh: full.map(|v| v as u64),
+                    health_percent,
+                    cycle_count: cycle_val,
+                    manufacturer: stat.manufacturer.filter(|m| !m.trim().is_empty()),
+                    chemistry: stat.chemistry.filter(|c| !c.trim().is_empty()),
+                });
+            }
+        }
     }
 
-    #[derive(Deserialize)]
-    #[serde(rename_all = "PascalCase")]
-    struct BatteryFullChargedCapacity {
-        full_charged_capacity: Option<u32>,
+    if let Ok(conn_cim) = wmi::WMIConnection::new(com) {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "PascalCase")]
+        struct Win32Battery {
+            design_capacity: Option<u32>,
+            full_charge_capacity: Option<u32>,
+            estimated_charge_remaining: Option<u16>,
+            name: Option<String>,
+        }
+
+        if let Ok(batteries) = conn_cim.raw_query::<Win32Battery>("SELECT DesignCapacity, FullChargeCapacity, EstimatedChargeRemaining, Name FROM Win32_Battery") {
+            if let Some(b) = batteries.into_iter().next() {
+                let design = b.design_capacity.map(|v| v as u64);
+                let full = b.full_charge_capacity.map(|v| v as u64);
+                let health_percent = match (full, design) {
+                    (Some(f), Some(d)) if d > 0 => Some((f as f64 / d as f64) * 100.0),
+                    _ => b.estimated_charge_remaining.map(|v| v as f64),
+                };
+
+                return Ok(BatteryInfo {
+                    design_capacity_mwh: design,
+                    full_charge_capacity_mwh: full,
+                    health_percent,
+                    cycle_count: None,
+                    manufacturer: b.name.filter(|m| !m.trim().is_empty()),
+                    chemistry: None,
+                });
+            }
+        }
     }
 
-    #[derive(Deserialize)]
-    #[serde(rename_all = "PascalCase")]
-    struct BatteryCycleCount {
-        cycle_count: Option<u32>,
-    }
-
-    let statics: Vec<BatteryStaticData> = conn
-        .raw_query("SELECT DesignedCapacity, Manufacturer, Chemistry FROM BatteryStaticData")
-        .map_err(|e| format!("BatteryStaticData query failed: {e}"))?;
-
-    let fulls: Vec<BatteryFullChargedCapacity> = conn
-        .raw_query("SELECT FullChargedCapacity FROM BatteryFullChargedCapacity")
-        .map_err(|e| format!("BatteryFullChargedCapacity query failed: {e}"))?;
-
-    let cycles: Vec<BatteryCycleCount> = conn
-        .raw_query("SELECT CycleCount FROM BatteryCycleCount")
-        .map_err(|e| format!("BatteryCycleCount query failed: {e}"))?;
-
-    let stat = statics
-        .into_iter()
-        .find(|s| s.designed_capacity.unwrap_or(0) > 0);
-    let Some(stat) = stat else {
-        return Err("No battery present (desktop or missing driver).".into());
-    };
-
-    let full = fulls
-        .into_iter()
-        .find(|f| f.full_charged_capacity.unwrap_or(0) > 0)
-        .and_then(|f| f.full_charged_capacity);
-
-    let design = stat.designed_capacity;
-    let health_percent = match (full, design) {
-        (Some(f), Some(d)) if d > 0 => Some((f as f64 / d as f64) * 100.0),
-        _ => None,
-    };
-
-    Ok(BatteryInfo {
-        design_capacity_mwh: design.map(|v| v as u64),
-        full_charge_capacity_mwh: full.map(|v| v as u64),
-        health_percent,
-        cycle_count: cycles.into_iter().find_map(|c| c.cycle_count),
-        manufacturer: stat.manufacturer.filter(|m| !m.trim().is_empty()),
-        chemistry: stat.chemistry.filter(|c| !c.trim().is_empty()),
-    })
+    Err("No battery present (desktop or missing driver).".into())
 }
 
 #[cfg(test)]
@@ -184,11 +208,54 @@ mod tests {
   </Batteries>
 </BatteryReport>"#;
 
+    const FIXTURE_NO_CYCLE: &str = r#"<BatteryReport><Batteries><Battery>
+      <DesignCapacity>50000</DesignCapacity>
+      <FullChargeCapacity>25000</FullChargeCapacity>
+    </Battery></Batteries></BatteryReport>"#;
+
     #[test]
     fn healthy_probook_like_fixture_parses() {
         let b = parse_battery_report_xml(FIXTURE_HEALTHY);
         assert_eq!(b.design_capacity_mwh, Some(68472));
         assert_eq!(b.full_charge_capacity_mwh, Some(61240));
         assert_eq!(b.cycle_count, Some(142));
+        assert_eq!(b.manufacturer.as_deref(), Some("SMP"));
+        assert_eq!(b.chemistry.as_deref(), Some("LION"));
+        let health = b.health_percent.unwrap();
+        assert!((health - 89.4).abs() < 0.1, "health={health}");
+        assert_eq!(
+            b.health_percent.map(crate::scoring::battery_subscore),
+            b.subscore()
+        );
+    }
+
+    #[test]
+    fn missing_fields_stay_none_never_panic() {
+        let b = parse_battery_report_xml(FIXTURE_NO_CYCLE);
+        assert_eq!(b.cycle_count, None);
+        assert_eq!(b.manufacturer, None);
+        assert_eq!(b.design_capacity_mwh, Some(50000));
+        assert_eq!(b.health_percent, Some(50.0));
+    }
+
+    #[test]
+    fn empty_report_is_all_none() {
+        let b = parse_battery_report_xml("<BatteryReport></BatteryReport>");
+        assert_eq!(b.design_capacity_mwh, None);
+        assert_eq!(b.health_percent, None);
+        assert_eq!(b.subscore(), None);
+    }
+
+    #[test]
+    fn garbage_input_does_not_crash() {
+        let b = parse_battery_report_xml("this is not xml at all <<>>");
+        assert_eq!(b.health_percent, None);
+    }
+
+    #[test]
+    fn zero_design_capacity_guarded() {
+        let xml = r#"<Battery><DesignCapacity>0</DesignCapacity><FullChargeCapacity>5</FullChargeCapacity></Battery>"#;
+        let b = parse_battery_report_xml(xml);
+        assert_eq!(b.health_percent, None);
     }
 }
