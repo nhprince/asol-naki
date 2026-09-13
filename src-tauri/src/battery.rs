@@ -94,9 +94,34 @@ pub async fn scan_battery() -> Result<BatteryInfo, String> {
 
 #[cfg(windows)]
 fn scan_battery_impl() -> Result<BatteryInfo, String> {
+    use std::os::windows::process::CommandExt;
+    use std::process::Command;
     use serde::Deserialize;
     use wmi::COMLibrary;
 
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+    // 1. Primary Method: powercfg /batteryreport /xml
+    // Exact design capacity, full charge capacity, cycle count, and manufacturer.
+    let temp_xml_path = std::env::temp_dir().join("asol_naki_battery_report.xml");
+    let output = Command::new("powercfg")
+        .args(["/batteryreport", "/xml", "/output", temp_xml_path.to_str().unwrap_or("")])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
+
+    if let Ok(out) = output {
+        if out.status.success() || temp_xml_path.exists() {
+            if let Ok(xml_content) = std::fs::read_to_string(&temp_xml_path) {
+                let _ = std::fs::remove_file(&temp_xml_path);
+                let info = parse_battery_report_xml(&xml_content);
+                if info.design_capacity_mwh.is_some() || info.full_charge_capacity_mwh.is_some() || info.health_percent.is_some() {
+                    return Ok(info);
+                }
+            }
+        }
+    }
+
+    // 2. Fallback Method A: ROOT\WMI WMI queries (BatteryStaticData & BatteryFullChargedCapacity)
     let com = match COMLibrary::without_security() {
         Ok(c) => c,
         Err(_) => unsafe { COMLibrary::assume_initialized() },
@@ -137,7 +162,7 @@ fn scan_battery_impl() -> Result<BatteryInfo, String> {
 
                 let design = stat.designed_capacity;
                 let health_percent = match (full, design) {
-                    (Some(f), Some(d)) if d > 0 => Some((f as f64 / d as f64) * 100.0),
+                    (Some(f), Some(d)) if d > 0 => Some(((f as f64 / d as f64) * 1000.0).round() / 10.0),
                     _ => None,
                 };
 
@@ -155,23 +180,25 @@ fn scan_battery_impl() -> Result<BatteryInfo, String> {
         }
     }
 
+    // 3. Fallback Method B: Win32_Battery (ROOT\CIMV2)
+    // NOTE: Only compute health if BOTH FullChargeCapacity and DesignCapacity are provided!
+    // Never fall back to EstimatedChargeRemaining (charge percentage) for health.
     if let Ok(conn_cim) = wmi::WMIConnection::new(com) {
         #[derive(Deserialize)]
         #[serde(rename_all = "PascalCase")]
         struct Win32Battery {
             design_capacity: Option<u32>,
             full_charge_capacity: Option<u32>,
-            estimated_charge_remaining: Option<u16>,
             name: Option<String>,
         }
 
-        if let Ok(batteries) = conn_cim.raw_query::<Win32Battery>("SELECT DesignCapacity, FullChargeCapacity, EstimatedChargeRemaining, Name FROM Win32_Battery") {
+        if let Ok(batteries) = conn_cim.raw_query::<Win32Battery>("SELECT DesignCapacity, FullChargeCapacity, Name FROM Win32_Battery") {
             if let Some(b) = batteries.into_iter().next() {
                 let design = b.design_capacity.map(|v| v as u64);
                 let full = b.full_charge_capacity.map(|v| v as u64);
                 let health_percent = match (full, design) {
-                    (Some(f), Some(d)) if d > 0 => Some((f as f64 / d as f64) * 100.0),
-                    _ => b.estimated_charge_remaining.map(|v| v as f64),
+                    (Some(f), Some(d)) if d > 0 => Some(((f as f64 / d as f64) * 1000.0).round() / 10.0),
+                    _ => None,
                 };
 
                 return Ok(BatteryInfo {
